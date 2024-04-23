@@ -229,12 +229,10 @@ class StickerItem(_StickerTag):
         cls, _ = _sticker_factory(data['type'])
         return cls(state=self._state, data=data)
 
-    async def fetch_guild(self) -> Guild:
+    async def fetch_guild(self):
         """|coro|
 
         Retrieves the guild this sticker belongs to.
-
-        .. versionadded:: 1.9
 
         Raises
         ------
@@ -248,9 +246,11 @@ class StickerItem(_StickerTag):
         :class:`Guild`
             The guild this emoji belongs to.
         """
+        from .guild import Guild  # Circular import
+
         state = self._state
         data = await state.http.get_sticker_guild(self.id)
-        return state.create_guild(data)
+        return Guild(state=state, data=data)
 
 
 class Sticker(_StickerTag):
@@ -532,7 +532,7 @@ class GuildSticker(Sticker):
         """
         await self._state.http.delete_guild_sticker(self.guild_id, self.id, reason)
 
-    async def fetch_guild(self) -> Guild:
+    async def fetch_guild(self):
         """|coro|
 
         Retrieves the guild this sticker belongs to.
@@ -549,9 +549,11 @@ class GuildSticker(Sticker):
         :class:`Guild`
             The guild this emoji belongs to.
         """
+        from .guild import Guild  # Circular import
+
         state = self._state
         data = await state.http.get_sticker_guild(self.id)
-        return state.create_guild(data)
+        return Guild(state=state, data=data)
 
 
 def _sticker_factory(sticker_type: Literal[1, 2]) -> Tuple[Type[Union[StandardSticker, GuildSticker, Sticker]], StickerType]:

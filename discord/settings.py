@@ -25,13 +25,13 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import base64
-import logging
-import struct
 from datetime import datetime, timezone
+import struct
+import logging
 from typing import TYPE_CHECKING, Any, Collection, Dict, List, Literal, Optional, Sequence, Tuple, Type, Union, overload
 
-from discord_protos import PreloadedUserSettings  # , FrecencyUserSettings
 from google.protobuf.json_format import MessageToDict, ParseDict
+from discord_protos import PreloadedUserSettings  # , FrecencyUserSettings
 
 from .activity import CustomActivity
 from .colour import Colour
@@ -41,8 +41,8 @@ from .enums import (
     InboxTab,
     Locale,
     NotificationLevel,
-    SpoilerRenderOptions,
     Status,
+    SpoilerRenderOptions,
     StickerAnimationOptions,
     StickerPickerSection,
     Theme,
@@ -51,7 +51,7 @@ from .enums import (
 )
 from .flags import FriendDiscoveryFlags, FriendSourceFlags, HubProgressFlags, OnboardingProgressFlags
 from .object import Object
-from .utils import MISSING, _get_as_snowflake, _ocast, find, parse_time, parse_timestamp, utcnow
+from .utils import MISSING, _get_as_snowflake, _ocast, parse_time, parse_timestamp, utcnow, find
 
 if TYPE_CHECKING:
     from google.protobuf.message import Message
@@ -61,14 +61,6 @@ if TYPE_CHECKING:
     from .channel import DMChannel, GroupChannel
     from .guild import Guild
     from .state import ConnectionState
-    from .types.user import (
-        ConsentSettings as ConsentSettingsPayload,
-        EmailSettings as EmailSettingsPayload,
-        PartialConsentSettings as PartialConsentSettingsPayload,
-        UserGuildSettings as UserGuildSettingsPayload,
-        ChannelOverride as ChannelOverridePayload,
-        MuteConfig as MuteConfigPayload,
-    )
     from .user import ClientUser, User
 
     PrivateChannel = Union[DMChannel, GroupChannel]
@@ -1145,12 +1137,6 @@ class GuildFolder:
 
     All properties have setters to faciliate editing the class for use with :meth:`UserSettings.edit`.
 
-    .. note::
-
-        Guilds not in folders *are* actually in folders API wise, with them being the only member.
-
-        These folders do not have an ID or name.
-
     .. container:: operations
 
         .. describe:: str(x)
@@ -1167,10 +1153,16 @@ class GuildFolder:
 
         Removed various operations and made ``id`` and ``name`` optional.
 
+    .. note::
+
+        Guilds not in folders *are* actually in folders API wise, with them being the only member.
+
+        These folders do not have an ID or name.
+
     Attributes
     ----------
     id: Optional[:class:`int`]
-        The ID of the folder. This is ``None`` for fake folders, as outlined in the note above.
+        The ID of the folder.
     name: Optional[:class:`str`]
         The name of the folder.
     """
@@ -1183,13 +1175,12 @@ class GuildFolder:
         id: Optional[int] = None,
         name: Optional[str] = None,
         colour: Optional[Colour] = None,
-        color: Optional[Colour] = None,
         guilds: Sequence[Snowflake] = MISSING,
     ):
         self._state: Optional[ConnectionState] = None
-        self.id: Optional[int] = id or None
-        self.name: Optional[str] = name or None
-        self._colour: Optional[int] = colour.value if colour else color.value if color else None
+        self.id: Optional[int] = id
+        self.name: Optional[str] = name
+        self._colour: Optional[int] = colour.value if colour else None
         self._guild_ids: List[int] = [guild.id for guild in guilds] if guilds else []
 
     def __str__(self) -> str:
@@ -1205,8 +1196,8 @@ class GuildFolder:
     def _from_legacy_settings(cls, *, data: Dict[str, Any], state: ConnectionState) -> Self:
         self = cls.__new__(cls)
         self._state = state
-        self.id = _get_as_snowflake(data, 'id') or None
-        self.name = data.get('name') or None
+        self.id = _get_as_snowflake(data, 'id')
+        self.name = data.get('name')
         self._colour = data.get('color')
         self._guild_ids = [int(guild_id) for guild_id in data['guild_ids']]
         return self
@@ -1223,14 +1214,14 @@ class GuildFolder:
         """
         self = cls.__new__(cls)
         self._state = state
-        self.id = data.id.value or None
+        self.id = data.id.value
         self.name = data.name.value
         self._colour = data.color.value if data.HasField('color') else None
         self._guild_ids = data.guild_ids
         return self
 
     def _get_guild(self, id, /) -> Union[Guild, Object]:
-        from .guild import Guild  # Circular import
+        from .guild import Guild  # circular import
 
         id = int(id)
         return self._state._get_or_create_unavailable_guild(id) if self._state else Object(id=id, type=Guild)
@@ -1934,6 +1925,8 @@ class LegacyUserSettings:
 class MuteConfig:
     """An object representing an object's mute status.
 
+    .. versionadded:: 2.0
+
     .. container:: operations
 
         .. describe:: x == y
@@ -1952,8 +1945,6 @@ class MuteConfig:
 
             Returns the mute status as an int.
 
-    .. versionadded:: 2.0
-
     Attributes
     ----------
     muted: :class:`bool`
@@ -1962,8 +1953,8 @@ class MuteConfig:
         When the mute will expire.
     """
 
-    def __init__(self, muted: bool, config: Optional[MuteConfigPayload] = None) -> None:
-        until = parse_time(config.get('end_time') if config else None)
+    def __init__(self, muted: bool, config: Dict[str, str]) -> None:
+        until = parse_time(config.get('end_time'))
         if until is not None:
             if until <= utcnow():
                 muted = False
@@ -2010,7 +2001,7 @@ class ChannelSettings:
         muted: MuteConfig
         collapsed: bool
 
-    def __init__(self, guild_id: Optional[int] = None, *, data: ChannelOverridePayload, state: ConnectionState) -> None:
+    def __init__(self, guild_id: Optional[int] = None, *, data: Dict[str, Any], state: ConnectionState) -> None:
         self._guild_id = guild_id
         self._state = state
         self._update(data)
@@ -2018,14 +2009,14 @@ class ChannelSettings:
     def __repr__(self) -> str:
         return f'<ChannelSettings channel={self.channel} level={self.level} muted={self.muted} collapsed={self.collapsed}>'
 
-    def _update(self, data: ChannelOverridePayload) -> None:
+    def _update(self, data: Dict[str, Any]) -> None:
         # We consider everything optional because this class can be constructed with no data
         # to represent the default settings
         self._channel_id = int(data['channel_id'])
         self.collapsed = data.get('collapsed', False)
 
         self.level = try_enum(NotificationLevel, data.get('message_notifications', 3))
-        self.muted = MuteConfig(data.get('muted', False), data.get('mute_config'))
+        self.muted = MuteConfig(data.get('muted', False), data.get('mute_config') or {})
 
     @property
     def channel(self) -> Union[GuildChannel, PrivateChannel]:
@@ -2111,7 +2102,7 @@ class ChannelSettings:
         override = find(lambda x: x.get('channel_id') == str(channel_id), data['channel_overrides']) or {
             'channel_id': channel_id
         }
-        return ChannelSettings(guild_id, data=override, state=state)  # type: ignore
+        return ChannelSettings(guild_id, data=override, state=state)
 
 
 class GuildSettings:
@@ -2154,15 +2145,14 @@ class GuildSettings:
         notify_highlights: HighlightLevel
         version: int
 
-    def __init__(self, *, data: UserGuildSettingsPayload, state: ConnectionState) -> None:
+    def __init__(self, *, data: Dict[str, Any], state: ConnectionState) -> None:
         self._state = state
-        self.version = -1  # Overriden by real data
         self._update(data)
 
     def __repr__(self) -> str:
         return f'<GuildSettings guild={self.guild!r} level={self.level} muted={self.muted} suppress_everyone={self.suppress_everyone} suppress_roles={self.suppress_roles}>'
 
-    def _update(self, data: UserGuildSettingsPayload) -> None:
+    def _update(self, data: Dict[str, Any]) -> None:
         # We consider everything optional because this class can be constructed with no data
         # to represent the default settings
         self._guild_id = guild_id = _get_as_snowflake(data, 'guild_id')
@@ -2173,9 +2163,9 @@ class GuildSettings:
         self.mobile_push = data.get('mobile_push', True)
         self.mute_scheduled_events = data.get('mute_scheduled_events', False)
         self.notify_highlights = try_enum(HighlightLevel, data.get('notify_highlights', 0))
-        self.version = data.get('version', self.version)
+        self.version = data.get('version', -1)  # Overriden by real data
 
-        self.muted = MuteConfig(data.get('muted', False), data.get('mute_config'))
+        self.muted = MuteConfig(data.get('muted', False), data.get('mute_config') or {})
         self._channel_overrides = overrides = {}
         state = self._state
         for override in data.get('channel_overrides', []):
@@ -2253,7 +2243,9 @@ class GuildSettings:
                 payload['muted'] = False
             else:
                 payload['muted'] = True
-                if muted_until is not True:
+                if muted_until is True:
+                    payload['mute_config'] = {'selected_time_window': -1, 'end_time': None}
+                else:
                     if muted_until.tzinfo is None:
                         raise TypeError(
                             'muted_until must be an aware datetime. Consider using discord.utils.utcnow() or datetime.datetime.now().astimezone() for local time.'
@@ -2264,18 +2256,25 @@ class GuildSettings:
                         'end_time': muted_until.isoformat(),
                     }
                     payload['mute_config'] = mute_config
+
         if level is not MISSING:
             payload['message_notifications'] = level.value
+
         if suppress_everyone is not MISSING:
             payload['suppress_everyone'] = suppress_everyone
+
         if suppress_roles is not MISSING:
             payload['suppress_roles'] = suppress_roles
+
         if mobile_push is not MISSING:
             payload['mobile_push'] = mobile_push
+
         if hide_muted_channels is not MISSING:
             payload['hide_muted_channels'] = hide_muted_channels
+
         if mute_scheduled_events is not MISSING:
             payload['mute_scheduled_events'] = mute_scheduled_events
+
         if notify_highlights is not MISSING:
             payload['notify_highlights'] = notify_highlights.value
 
@@ -2304,9 +2303,7 @@ class TrackingSettings:
 
     __slots__ = ('_state', 'personalization', 'usage_statistics')
 
-    def __init__(
-        self, *, data: Union[PartialConsentSettingsPayload, ConsentSettingsPayload], state: ConnectionState
-    ) -> None:
+    def __init__(self, *, data: Dict[str, Dict[str, bool]], state: ConnectionState) -> None:
         self._state = state
         self._update(data)
 
@@ -2314,9 +2311,9 @@ class TrackingSettings:
         return f'<TrackingSettings personalization={self.personalization} usage_statistics={self.usage_statistics}>'
 
     def __bool__(self) -> bool:
-        return any((self.personalization, self.usage_statistics))
+        return any({self.personalization, self.usage_statistics})
 
-    def _update(self, data: Union[PartialConsentSettingsPayload, ConsentSettingsPayload]):
+    def _update(self, data: Dict[str, Dict[str, bool]]):
         self.personalization = data.get('personalization', {}).get('consented', False)
         self.usage_statistics = data.get('usage_statistics', {}).get('consented', False)
 
@@ -2372,10 +2369,6 @@ class EmailSettings:
         Whether you want to receive emails for advice and tricks.
     updates_and_announcements: :class:`bool`
         Whether you want to receive emails for updates and new features.
-    family_center_digest: :class:`bool`
-        Whether you want to receive weekly emails for recent family activity.
-
-        .. versionadded:: 2.1
     """
 
     __slots__ = (
@@ -2386,25 +2379,23 @@ class EmailSettings:
         'recommendations_and_events',
         'tips',
         'updates_and_announcements',
-        'family_center_digest',
     )
 
-    def __init__(self, *, data: EmailSettingsPayload, state: ConnectionState):
+    def __init__(self, *, data: dict, state: ConnectionState):
         self._state = state
         self._update(data)
 
     def __repr__(self) -> str:
         return f'<EmailSettings initialized={self.initialized}>'
 
-    def _update(self, data: EmailSettingsPayload):
-        self.initialized: bool = data.get('initialized', False)
+    def _update(self, data: dict):
+        self.initialized = data.get('initialized', False)
         categories = data.get('categories', {})
-        self.communication: bool = categories.get('communication', False)
-        self.social: bool = categories.get('social', False)
-        self.recommendations_and_events: bool = categories.get('recommendations_and_events', False)
-        self.tips: bool = categories.get('tips', False)
-        self.updates_and_announcements: bool = categories.get('updates_and_announcements', False)
-        self.family_center_digest: bool = categories.get('family_center_digest', False)
+        self.communication = categories.get('communication', False)
+        self.social = categories.get('social', False)
+        self.recommendations_and_events = categories.get('recommendations_and_events', False)
+        self.tips = categories.get('tips', False)
+        self.updates_and_announcements = categories.get('updates_and_announcements', False)
 
     @overload
     async def edit(self) -> None:
@@ -2414,7 +2405,6 @@ class EmailSettings:
     async def edit(
         self,
         *,
-        initialized: bool = MISSING,
         communication: bool = MISSING,
         social: bool = MISSING,
         recommendations_and_events: bool = MISSING,
@@ -2452,8 +2442,8 @@ class EmailSettings:
 
         # It seems that initialized is settable, but it doesn't do anything
         # So we support just in case but leave it undocumented
-        initialized = kwargs.pop('initialized', MISSING)
-        if initialized is not MISSING:
+        initialized = kwargs.pop('initialized', None)
+        if initialized is not None:
             payload['initialized'] = initialized
         if kwargs:
             payload['categories'] = kwargs

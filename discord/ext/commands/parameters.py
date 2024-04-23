@@ -87,7 +87,7 @@ class Parameter(inspect.Parameter):
     .. versionadded:: 2.0
     """
 
-    __slots__ = ('_displayed_default', '_description', '_fallback', '_displayed_name')
+    __slots__ = ('_displayed_default', '_description', '_fallback')
 
     def __init__(
         self,
@@ -97,7 +97,6 @@ class Parameter(inspect.Parameter):
         annotation: Any = empty,
         description: str = empty,
         displayed_default: str = empty,
-        displayed_name: str = empty,
     ) -> None:
         super().__init__(name=name, kind=kind, default=default, annotation=annotation)
         self._name = name
@@ -107,7 +106,6 @@ class Parameter(inspect.Parameter):
         self._annotation = annotation
         self._displayed_default = displayed_default
         self._fallback = False
-        self._displayed_name = displayed_name
 
     def replace(
         self,
@@ -118,7 +116,6 @@ class Parameter(inspect.Parameter):
         annotation: Any = MISSING,
         description: str = MISSING,
         displayed_default: Any = MISSING,
-        displayed_name: Any = MISSING,
     ) -> Self:
         if name is MISSING:
             name = self._name
@@ -132,8 +129,6 @@ class Parameter(inspect.Parameter):
             description = self._description
         if displayed_default is MISSING:
             displayed_default = self._displayed_default
-        if displayed_name is MISSING:
-            displayed_name = self._displayed_name
 
         return self.__class__(
             name=name,
@@ -142,7 +137,6 @@ class Parameter(inspect.Parameter):
             annotation=annotation,
             description=description,
             displayed_default=displayed_default,
-            displayed_name=displayed_name,
         )
 
     if not TYPE_CHECKING:  # this is to prevent anything breaking if inspect internals change
@@ -175,21 +169,7 @@ class Parameter(inspect.Parameter):
         if self._displayed_default is not empty:
             return self._displayed_default
 
-        if self.required:
-            return None
-
-        if callable(self.default) or self.default is None:
-            return None
-
-        return str(self.default)
-
-    @property
-    def displayed_name(self) -> Optional[str]:
-        """Optional[:class:`str`]: The name that is displayed to the user.
-
-        .. versionadded:: 2.3
-        """
-        return self._displayed_name if self._displayed_name is not empty else None
+        return None if self.required else str(self.default)
 
     async def get_default(self, ctx: Context[Any]) -> Any:
         """|coro|
@@ -203,7 +183,7 @@ class Parameter(inspect.Parameter):
         """
         # pre-condition: required is False
         if callable(self.default):
-            return await maybe_coroutine(self.default, ctx)
+            return await maybe_coroutine(self.default, ctx)  # type: ignore
         return self.default
 
 
@@ -213,9 +193,8 @@ def parameter(
     default: Any = empty,
     description: str = empty,
     displayed_default: str = empty,
-    displayed_name: str = empty,
 ) -> Any:
-    r"""parameter(\*, converter=..., default=..., description=..., displayed_default=..., displayed_name=...)
+    r"""parameter(\*, converter=..., default=..., description=..., displayed_default=...)
 
     A way to assign custom metadata for a :class:`Command`\'s parameter.
 
@@ -242,10 +221,6 @@ def parameter(
         The description of this parameter.
     displayed_default: :class:`str`
         The displayed default in :attr:`Command.signature`.
-    displayed_name: :class:`str`
-        The name that is displayed to the user.
-
-        .. versionadded:: 2.3
     """
     return Parameter(
         name='empty',
@@ -254,7 +229,6 @@ def parameter(
         default=default,
         description=description,
         displayed_default=displayed_default,
-        displayed_name=displayed_name,
     )
 
 
@@ -266,13 +240,12 @@ class ParameterAlias(Protocol):
         default: Any = empty,
         description: str = empty,
         displayed_default: str = empty,
-        displayed_name: str = empty,
     ) -> Any:
         ...
 
 
 param: ParameterAlias = parameter
-r"""param(\*, converter=..., default=..., description=..., displayed_default=..., displayed_name=...)
+r"""param(\*, converter=..., default=..., description=..., displayed_default=...)
 
 An alias for :func:`parameter`.
 

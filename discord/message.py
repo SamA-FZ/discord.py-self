@@ -51,12 +51,12 @@ from .reaction import Reaction
 from .emoji import Emoji
 from .partial_emoji import PartialEmoji
 from .calls import CallMessage
-from .enums import MessageType, ChannelType, ApplicationCommandType, try_enum
+from .enums import MessageType, ChannelType, AppCommandType, try_enum
 from .errors import HTTPException
 from .components import _component_factory
 from .embeds import Embed
 from .member import Member
-from .flags import MessageFlags, AttachmentFlags
+from .flags import MessageFlags
 from .file import File
 from .utils import escape_mentions, MISSING
 from .http import handle_message_parameters
@@ -82,12 +82,11 @@ if TYPE_CHECKING:
         MessageReference as MessageReferencePayload,
         MessageActivity as MessageActivityPayload,
         RoleSubscriptionData as RoleSubscriptionDataPayload,
-        MessageSearchResult as MessageSearchResultPayload,
     )
 
     from .types.interactions import MessageInteraction as MessageInteractionPayload
 
-    from .types.components import MessageActionRow as ComponentPayload
+    from .types.components import Component as ComponentPayload
     from .types.threads import ThreadArchiveDuration
     from .types.member import (
         Member as MemberPayload,
@@ -98,8 +97,7 @@ if TYPE_CHECKING:
     from .types.gateway import MessageReactionRemoveEvent, MessageUpdateEvent
     from .abc import Snowflake
     from .abc import GuildChannel, MessageableChannel
-    from .components import ActionRow
-    from .file import _FileBase
+    from .components import ActionRow, ActionRowChildComponentType
     from .state import ConnectionState
     from .mentions import AllowedMentions
     from .sticker import GuildSticker
@@ -107,6 +105,7 @@ if TYPE_CHECKING:
     from .role import Role
 
     EmojiInputType = Union[Emoji, PartialEmoji, str]
+    MessageComponentType = Union[ActionRow, ActionRowChildComponentType]
 
 
 __all__ = (
@@ -190,14 +189,6 @@ class Attachment(Hashable):
         Whether the attachment is ephemeral.
 
         .. versionadded:: 2.0
-    duration: Optional[:class:`float`]
-        The duration of the audio file in seconds. Returns ``None`` if it's not a voice message.
-
-        .. versionadded:: 2.1
-    waveform: Optional[:class:`bytes`]
-        The waveform (amplitudes) of the audio in bytes. Returns ``None`` if it's not a voice message.
-
-        .. versionadded:: 2.1
     """
 
     __slots__ = (
@@ -212,9 +203,6 @@ class Attachment(Hashable):
         'content_type',
         'description',
         'ephemeral',
-        'duration',
-        'waveform',
-        '_flags',
     )
 
     def __init__(self, *, data: AttachmentPayload, state: ConnectionState):
@@ -229,28 +217,10 @@ class Attachment(Hashable):
         self.content_type: Optional[str] = data.get('content_type')
         self.description: Optional[str] = data.get('description')
         self.ephemeral: bool = data.get('ephemeral', False)
-        self.duration: Optional[float] = data.get('duration_secs')
-
-        waveform = data.get('waveform')
-        self.waveform: Optional[bytes] = utils._base64_to_bytes(waveform) if waveform is not None else None
-
-        self._flags: int = data.get('flags', 0)
-
-    @property
-    def flags(self) -> AttachmentFlags:
-        """:class:`AttachmentFlags`: The attachment's flags."""
-        return AttachmentFlags._from_value(self._flags)
 
     def is_spoiler(self) -> bool:
         """:class:`bool`: Whether this attachment contains a spoiler."""
         return self.filename.startswith('SPOILER_')
-
-    def is_voice_message(self) -> bool:
-        """:class:`bool`: Whether this attachment is a voice message.
-
-        .. versionadded:: 2.1
-        """
-        return self.waveform is not None
 
     def __repr__(self) -> str:
         return f'<Attachment id={self.id} filename={self.filename!r} url={self.url!r}>'
@@ -658,15 +628,11 @@ class PartialMessage(Hashable):
         The channel associated with this partial message.
     id: :class:`int`
         The message ID.
-    guild_id: Optional[:class:`int`]
-        The ID of the guild that the partial message belongs to, if applicable.
-
-        .. versionadded:: 2.1
     guild: Optional[:class:`Guild`]
         The guild that the partial message belongs to, if applicable.
     """
 
-    __slots__ = ('channel', 'id', '_state', 'guild_id', 'guild')
+    __slots__ = ('channel', 'id', '_cs_guild', '_state', 'guild')
 
     def __init__(self, *, channel: MessageableChannel, id: int) -> None:
         if not isinstance(channel, PartialMessageable) and channel.type not in (
@@ -688,12 +654,6 @@ class PartialMessage(Hashable):
         self.id: int = id
 
         self.guild: Optional[Guild] = getattr(channel, 'guild', None)
-        self.guild_id: Optional[int] = self.guild.id if self.guild else None
-        if hasattr(channel, 'guild_id'):
-            if self.guild_id is not None:
-                channel.guild_id = self.guild_id  # type: ignore
-            else:
-                self.guild_id = channel.guild_id  # type: ignore
 
     def _update(self, data: MessageUpdateEvent) -> None:
         # This is used for duck typing purposes.
@@ -784,7 +744,7 @@ class PartialMessage(Hashable):
         self,
         *,
         content: Optional[str] = ...,
-        attachments: Sequence[Union[Attachment, _FileBase]] = ...,
+        attachments: Sequence[Union[Attachment, File]] = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
     ) -> Message:
@@ -795,7 +755,7 @@ class PartialMessage(Hashable):
         self,
         *,
         content: Optional[str] = ...,
-        attachments: Sequence[Union[Attachment, _FileBase]] = ...,
+        attachments: Sequence[Union[Attachment, File]] = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
     ) -> Message:
@@ -804,7 +764,7 @@ class PartialMessage(Hashable):
     async def edit(
         self,
         content: Optional[str] = MISSING,
-        attachments: Sequence[Union[Attachment, _FileBase]] = MISSING,
+        attachments: Sequence[Union[Attachment, File]] = MISSING,
         delete_after: Optional[float] = None,
         allowed_mentions: Optional[AllowedMentions] = MISSING,
     ) -> Message:
@@ -826,7 +786,7 @@ class PartialMessage(Hashable):
         content: Optional[:class:`str`]
             The new content to replace the message with.
             Could be ``None`` to remove the content.
-        attachments: List[Union[:class:`Attachment`, :class:`File`, :class:`CloudFile`]]
+        attachments: List[Union[:class:`Attachment`, :class:`File`]]
             A list of attachments to keep in the message as well as new files to upload. If ``[]`` is passed
             then all attachments are removed.
 
@@ -1115,7 +1075,7 @@ class PartialMessage(Hashable):
         name: :class:`str`
             The name of the thread.
         auto_archive_duration: :class:`int`
-            The duration in minutes before a thread is automatically hidden from the channel list.
+            The duration in minutes before a thread is automatically archived for inactivity.
             If not provided, the channel's default auto archive duration is used.
 
             Must be one of ``60``, ``1440``, ``4320``, or ``10080``, if provided.
@@ -1155,54 +1115,17 @@ class PartialMessage(Hashable):
         )
         return Thread(guild=self.guild, state=self._state, data=data)
 
-    async def ack(self, *, manual: bool = False, mention_count: Optional[int] = None) -> None:
+    async def ack(self) -> None:
         """|coro|
 
         Marks this message as read.
-
-        .. note::
-
-            This sets the last acknowledged message to this message,
-            which will mark acknowledged messages created after this one as unread.
-
-        Parameters
-        -----------
-        manual: :class:`bool`
-            Whether to manually set the channel read state to this message.
-
-            .. versionadded:: 2.1
-        mention_count: Optional[:class:`int`]
-            The mention count to set the channel read state to. Only applicable for
-            manual acknowledgements.
-
-            .. versionadded:: 2.1
 
         Raises
         -------
         HTTPException
             Acking failed.
         """
-        await self.channel.read_state.ack(self.id, manual=manual, mention_count=mention_count)
-
-    async def unack(self, *, mention_count: Optional[int] = None) -> None:
-        """|coro|
-
-        Marks this message as unread.
-        This manually sets the read state to the current message's ID - 1.
-
-        .. versionadded:: 2.1
-
-        Parameters
-        -----------
-        mention_count: Optional[:class:`int`]
-            The mention count to set the channel read state to.
-
-        Raises
-        -------
-        HTTPException
-            Unacking failed.
-        """
-        await self.channel.read_state.ack(self.id - 1, manual=True, mention_count=mention_count)
+        await self._state.http.ack_message(self.channel.id, self.id)
 
     @overload
     async def reply(
@@ -1210,7 +1133,7 @@ class PartialMessage(Hashable):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        file: _FileBase = ...,
+        file: File = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1227,7 +1150,7 @@ class PartialMessage(Hashable):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        files: Sequence[_FileBase] = ...,
+        files: Sequence[File] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1244,7 +1167,7 @@ class PartialMessage(Hashable):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        file: _FileBase = ...,
+        file: File = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1261,7 +1184,7 @@ class PartialMessage(Hashable):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        files: Sequence[_FileBase] = ...,
+        files: Sequence[File] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -1407,7 +1330,7 @@ class Message(PartialMessage, Hashable):
         This is not stored long term within Discord's servers and is only used ephemerally.
     embeds: List[:class:`Embed`]
         A list of embeds the message has.
-    channel: Union[:class:`TextChannel`, :class:`StageChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`, :class:`GroupChannel`, :class:`PartialMessageable`]
+    channel: Union[:class:`TextChannel`, :class:`StageChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`, :class:`GroupChannel`]
         The :class:`TextChannel` or :class:`Thread` that the message was sent from.
         Could be a :class:`DMChannel` or :class:`GroupChannel` if it's a private message.
     call: Optional[:class:`CallMessage`]
@@ -1497,34 +1420,12 @@ class Message(PartialMessage, Hashable):
         the approximate position of the message in a thread.
 
         .. versionadded:: 2.0
-    guild_id: Optional[:class:`int`]
-        The ID of the guild that the partial message belongs to, if applicable.
-
-        .. versionadded:: 2.1
     guild: Optional[:class:`Guild`]
         The guild that the message belongs to, if applicable.
     interaction: Optional[:class:`Interaction`]
         The interaction that this message is a response to.
 
         .. versionadded:: 2.0
-    hit: :class:`bool`
-        Whether the message was a hit in a search result. As surrounding messages
-        are no longer returned in search results, this is always ``True`` for search results.
-
-        .. versionadded:: 2.1
-    total_results: Optional[:class:`int`]
-        The total number of results for the search query. This is only present in search results.
-
-        .. versionadded:: 2.1
-    analytics_id: Optional[:class:`str`]
-        The search results analytics ID. This is only present in search results.
-
-        .. versionadded:: 2.1
-    doing_deep_historical_index: Optional[:class:`bool`]
-        The status of the document's current deep historical indexing operation, if any.
-        This is only present in search results.
-
-        .. versionadded:: 2.1
     """
 
     __slots__ = (
@@ -1559,10 +1460,6 @@ class Message(PartialMessage, Hashable):
         'role_subscription',
         'application_id',
         'position',
-        'hit',
-        'total_results',
-        'analytics_id',
-        'doing_deep_historical_index',
     )
 
     if TYPE_CHECKING:
@@ -1572,7 +1469,7 @@ class Message(PartialMessage, Hashable):
         mentions: List[Union[User, Member]]
         author: Union[User, Member]
         role_mentions: List[Role]
-        components: List[ActionRow]
+        components: List[MessageComponentType]
 
     def __init__(
         self,
@@ -1580,7 +1477,6 @@ class Message(PartialMessage, Hashable):
         state: ConnectionState,
         channel: MessageableChannel,
         data: MessagePayload,
-        search_result: Optional[MessageSearchResultPayload] = None,
     ) -> None:
         self.channel: MessageableChannel = channel
         self.id: int = int(data['id'])
@@ -1607,14 +1503,7 @@ class Message(PartialMessage, Hashable):
             # If the channel doesn't have a guild attribute, we handle that
             self.guild = channel.guild
         except AttributeError:
-            guild_id = utils._get_as_snowflake(data, 'guild_id')
-            if guild_id is not None:
-                channel.guild_id = guild_id  # type: ignore
-            else:
-                guild_id = channel.guild_id  # type: ignore
-
-            self.guild_id: Optional[int] = guild_id
-            self.guild = state._get_guild(guild_id)
+            self.guild = state._get_guild(utils._get_as_snowflake(data, 'guild_id'))
 
         self.application: Optional[IntegrationApplication] = None
         try:
@@ -1664,12 +1553,6 @@ class Message(PartialMessage, Hashable):
             pass
         else:
             self.role_subscription = RoleSubscriptionInfo(role_subscription)
-
-        search_payload = search_result or {}
-        self.hit: bool = data.get('hit', False)
-        self.total_results: Optional[int] = search_payload.get('total_results')
-        self.analytics_id: Optional[str] = search_payload.get('analytics_id')
-        self.doing_deep_historical_index: Optional[bool] = search_payload.get('doing_deep_historical_index')
 
         for handler in ('author', 'member', 'mentions', 'mention_roles', 'call', 'interaction', 'components'):
             try:
@@ -1800,7 +1683,7 @@ class Message(PartialMessage, Hashable):
         self.nonce = value
 
     def _handle_author(self, author: UserPayload) -> None:
-        self.author = self._state.store_user(author, cache=self.webhook_id is None)
+        self.author = self._state.store_user(author)
         if isinstance(self.guild, Guild):
             found = self.guild.get_member(self.author.id)
             if found is not None:
@@ -1839,12 +1722,12 @@ class Message(PartialMessage, Hashable):
                 r.append(Member._try_upgrade(data=mention, guild=guild, state=state))
 
     def _handle_mention_roles(self, role_mentions: List[int]) -> None:
-        self.role_mentions = r = []
+        self.role_mentions = []
         if isinstance(self.guild, Guild):
             for role_id in map(int, role_mentions):
                 role = self.guild.get_role(role_id)
                 if role is not None:
-                    r.append(role)
+                    self.role_mentions.append(role)
 
     def _handle_call(self, call: Optional[CallPayload]) -> None:
         if call is None or self.type is not MessageType.call:
@@ -1864,8 +1747,10 @@ class Message(PartialMessage, Hashable):
 
     def _handle_components(self, data: List[ComponentPayload]) -> None:
         self.components = []
+
         for component_data in data:
             component = _component_factory(component_data, self)
+
             if component is not None:
                 self.components.append(component)
 
@@ -1879,22 +1764,6 @@ class Message(PartialMessage, Hashable):
     ) -> None:
         self.guild = new_guild
         self.channel = new_channel  # type: ignore # Not all "GuildChannel" are messageable at the moment
-
-    def _is_self_mentioned(self) -> bool:
-        state = self._state
-        guild = self.guild
-        channel = self.channel
-        settings = guild.notification_settings if guild else state.client.notification_settings
-
-        if channel.type in (ChannelType.private, ChannelType.group) and not settings.muted and not channel.notification_settings.muted:  # type: ignore
-            return True
-        if state.user in self.mentions:
-            return True
-        if self.mention_everyone and not settings.suppress_everyone:
-            return True
-        if guild and guild.me and not settings.suppress_roles and guild.me.mentioned_in(self):
-            return True
-        return False
 
     @utils.cached_slot_property('_cs_raw_mentions')
     def raw_mentions(self) -> List[int]:
@@ -2013,14 +1882,6 @@ class Message(PartialMessage, Hashable):
             MessageType.thread_starter_message,
         )
 
-    def is_acked(self) -> bool:
-        """:class:`bool`: Whether the message has been marked as read.
-
-        .. versionadded:: 2.1
-        """
-        read_state = self._state.get_read_state(self.channel.id)
-        return read_state.last_acked_id >= self.id if read_state.last_acked_id else False
-
     @utils.cached_slot_property('_cs_system_content')
     def system_content(self) -> str:
         r""":class:`str`: A property that returns the content that is rendered
@@ -2049,7 +1910,7 @@ class Message(PartialMessage, Hashable):
                 return f'{self.author.name} changed the channel name: **{self.content}**'
 
         if self.type is MessageType.channel_icon_change:
-            return f'{self.author.name} changed the group icon.'
+            return f'{self.author.name} changed the channel icon.'
 
         if self.type is MessageType.pins_add:
             return f'{self.author.name} pinned a message to this channel.'
@@ -2170,7 +2031,7 @@ class Message(PartialMessage, Hashable):
         self,
         *,
         content: Optional[str] = ...,
-        attachments: Sequence[Union[Attachment, _FileBase]] = ...,
+        attachments: Sequence[Union[Attachment, File]] = ...,
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
@@ -2182,7 +2043,7 @@ class Message(PartialMessage, Hashable):
         self,
         *,
         content: Optional[str] = ...,
-        attachments: Sequence[Union[Attachment, _FileBase]] = ...,
+        attachments: Sequence[Union[Attachment, File]] = ...,
         suppress: bool = ...,
         delete_after: Optional[float] = ...,
         allowed_mentions: Optional[AllowedMentions] = ...,
@@ -2192,7 +2053,7 @@ class Message(PartialMessage, Hashable):
     async def edit(
         self,
         content: Optional[str] = MISSING,
-        attachments: Sequence[Union[Attachment, _FileBase]] = MISSING,
+        attachments: Sequence[Union[Attachment, File]] = MISSING,
         suppress: bool = False,
         delete_after: Optional[float] = None,
         allowed_mentions: Optional[AllowedMentions] = MISSING,
@@ -2218,7 +2079,7 @@ class Message(PartialMessage, Hashable):
         content: Optional[:class:`str`]
             The new content to replace the message with.
             Could be ``None`` to remove the content.
-        attachments: List[Union[:class:`Attachment`, :class:`File`, :class:`CloudFile`]]
+        attachments: List[Union[:class:`Attachment`, :class:`File`]]
             A list of attachments to keep in the message as well as new files to upload. If ``[]`` is passed
             then all attachments are removed.
 
@@ -2286,7 +2147,7 @@ class Message(PartialMessage, Hashable):
 
         return message
 
-    async def add_files(self, *files: _FileBase) -> Message:
+    async def add_files(self, *files: File) -> Message:
         r"""|coro|
 
         Adds new files to the end of the message attachments.
@@ -2295,7 +2156,7 @@ class Message(PartialMessage, Hashable):
 
         Parameters
         -----------
-        \*files: Union[:class:`File`, :class:`CloudFile`]
+        \*files: :class:`File`
             New files to add to the message.
 
         Raises
@@ -2338,7 +2199,6 @@ class Message(PartialMessage, Hashable):
         """
         return await self.edit(attachments=[a for a in self.attachments if a not in attachments])
 
-    @utils.deprecated("Message.channel.application_commands")
     def message_commands(
         self,
         query: Optional[str] = None,
@@ -2349,8 +2209,6 @@ class Message(PartialMessage, Hashable):
         with_applications: bool = True,
     ) -> AsyncIterator[MessageCommand]:
         """Returns a :term:`asynchronous iterator` of the message commands available to use on the message.
-
-        .. deprecated:: 2.1
 
         Examples
         ---------
@@ -2371,8 +2229,13 @@ class Message(PartialMessage, Hashable):
         ----------
         query: Optional[:class:`str`]
             The query to search for. Specifying this limits results to 25 commands max.
+
+            This parameter is faked if ``application`` is specified.
         limit: Optional[:class:`int`]
-            The maximum number of commands to send back. If ``None``, returns all commands.
+            The maximum number of commands to send back. Defaults to 0 if ``command_ids`` is passed, else 25.
+            If ``None``, returns all commands.
+
+            This parameter is faked if ``application`` is specified.
         command_ids: Optional[List[:class:`int`]]
             List of up to 100 command IDs to search for. If the command doesn't exist, it won't be returned.
 
@@ -2381,7 +2244,7 @@ class Message(PartialMessage, Hashable):
         application: Optional[:class:`~discord.abc.Snowflake`]
             Whether to return this application's commands. Always set to DM recipient in a private channel context.
         with_applications: :class:`bool`
-            Whether to include applications in the response.
+            Whether to include applications in the response. Defaults to ``True``.
 
         Raises
         ------
@@ -2404,10 +2267,11 @@ class Message(PartialMessage, Hashable):
         """
         return _handle_commands(
             self,
-            ApplicationCommandType.message,
+            AppCommandType.message,
             query=query,
             limit=limit,
             command_ids=command_ids,
             application=application,
+            with_applications=with_applications,
             target=self,
         )

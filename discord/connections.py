@@ -124,13 +124,15 @@ class PartialConnection:
         if self.type == ConnectionType.twitch:
             return f'https://www.twitch.tv/{self.name}'
         elif self.type == ConnectionType.youtube:
-            return f'https://www.youtube.com/channel/{self.id}'
+            return f'https://www.youtube.com/{self.id}'
         elif self.type == ConnectionType.skype:
             return f'skype:{self.id}?userinfo'
         elif self.type == ConnectionType.steam:
             return f'https://steamcommunity.com/profiles/{self.id}'
         elif self.type == ConnectionType.reddit:
             return f'https://www.reddit.com/u/{self.name}'
+        elif self.type == ConnectionType.facebook:
+            return f'https://www.facebook.com/{self.name}'
         elif self.type == ConnectionType.twitter:
             return f'https://twitter.com/{self.name}'
         elif self.type == ConnectionType.spotify:
@@ -141,10 +143,6 @@ class PartialConnection:
             return f'https://github.com/{self.name}'
         elif self.type == ConnectionType.tiktok:
             return f'https://tiktok.com/@{self.name}'
-        elif self.type == ConnectionType.ebay:
-            return f'https://www.ebay.com/usr/{self.name}'
-        elif self.type == ConnectionType.instagram:
-            return f'https://www.instagram.com/{self.name}'
 
 
 class Connection(PartialConnection):
@@ -228,6 +226,8 @@ class Connection(PartialConnection):
         ]
 
     def _resolve_guild(self, data: IntegrationPayload) -> Guild:
+        from .guild import Guild
+
         state = self._state
         guild_data = data.get('guild')
         if not guild_data:
@@ -236,7 +236,7 @@ class Connection(PartialConnection):
         guild_id = int(guild_data['id'])
         guild = state._get_guild(guild_id)
         if guild is None:
-            guild = state.create_guild(guild_data)
+            guild = Guild(data=guild_data, state=state)
         return guild
 
     async def edit(

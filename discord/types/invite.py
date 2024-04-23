@@ -27,61 +27,67 @@ from __future__ import annotations
 from typing import Literal, Optional, TypedDict, Union
 from typing_extensions import NotRequired
 
-from .application import PartialApplication
-from .channel import InviteStageInstance, PartialChannel
-from .gateway import InviteCreateEvent, InviteDeleteEvent
-from .guild import InviteGuild, _GuildCounts
 from .scheduled_event import GuildScheduledEvent
 from .snowflake import Snowflake
+from .guild import InviteGuild, _GuildPreviewUnique
+from .channel import PartialChannel
 from .user import PartialUser
+from .application import PartialApplication
 
 InviteTargetType = Literal[1, 2]
 
 
-class _InviteMetadata(TypedDict):
-    uses: NotRequired[int]
-    max_uses: NotRequired[int]
-    max_age: NotRequired[int]
-    temporary: NotRequired[bool]
-    created_at: str
-
-
-class _InviteTargetType(TypedDict, total=False):
-    target_type: InviteTargetType
-    target_user: PartialUser
-    target_application: PartialApplication
-
-
-class VanityInvite(TypedDict):
-    code: Optional[str]
+class _InviteMetadata(TypedDict, total=False):
     uses: int
-
-
-class PartialInvite(_InviteTargetType):
-    code: str
-    type: Literal[0, 1, 2]
-    channel: Optional[PartialChannel]
-    guild_id: NotRequired[Snowflake]
-    guild: NotRequired[InviteGuild]
-    inviter: NotRequired[PartialUser]
-    flags: NotRequired[int]
+    max_uses: int
+    max_age: int
+    temporary: bool
+    created_at: str
     expires_at: Optional[str]
-    guild_scheduled_event: NotRequired[GuildScheduledEvent]
-    stage_instance: NotRequired[InviteStageInstance]
 
 
-class InviteWithCounts(PartialInvite, _GuildCounts):
+class VanityInvite(_InviteMetadata):
+    code: Optional[str]
+    revoked: NotRequired[bool]
+
+
+class IncompleteInvite(_InviteMetadata):
+    code: str
+    channel: PartialChannel
+
+
+class Invite(IncompleteInvite, total=False):
+    guild: InviteGuild
+    inviter: PartialUser
+    target_user: PartialUser
+    target_type: InviteTargetType
+    target_application: PartialApplication
+    guild_scheduled_event: GuildScheduledEvent
+
+
+class InviteWithCounts(Invite, _GuildPreviewUnique):
     ...
 
 
-class InviteWithMetadata(PartialInvite, _InviteMetadata):
-    ...
+class GatewayInviteCreate(TypedDict):
+    channel_id: Snowflake
+    code: str
+    created_at: str
+    max_age: int
+    max_uses: int
+    temporary: bool
+    uses: bool
+    guild_id: Snowflake
+    inviter: NotRequired[PartialUser]
+    target_type: NotRequired[InviteTargetType]
+    target_user: NotRequired[PartialUser]
+    target_application: NotRequired[PartialApplication]
 
 
-class AcceptedInvite(InviteWithCounts):
-    new_member: bool
-    show_verification_form: bool
+class GatewayInviteDelete(TypedDict):
+    channel_id: Snowflake
+    code: str
+    guild_id: NotRequired[Snowflake]
 
 
-Invite = Union[PartialInvite, InviteWithCounts, InviteWithMetadata, AcceptedInvite]
-GatewayInvite = Union[InviteCreateEvent, InviteDeleteEvent]
+GatewayInvite = Union[GatewayInviteCreate, GatewayInviteDelete]

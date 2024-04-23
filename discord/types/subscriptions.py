@@ -73,7 +73,6 @@ class SubscriptionInvoiceItem(TypedDict):
     subscription_plan_id: Snowflake
     subscription_plan_price: int
     discounts: List[SubscriptionDiscount]
-    tenant_metadata: NotRequired[Dict[str, Any]]
 
 
 class SubscriptionInvoice(TypedDict):
@@ -87,8 +86,6 @@ class SubscriptionInvoice(TypedDict):
     items: List[SubscriptionInvoiceItem]
     current_period_start: str
     current_period_end: str
-    applied_discount_ids: NotRequired[List[Snowflake]]
-    applied_user_discounts: NotRequired[Dict[Snowflake, Optional[Any]]]
 
 
 class SubscriptionRenewalMutations(TypedDict, total=False):
@@ -116,12 +113,9 @@ class Subscription(PartialSubscription):
     payment_source_id: Optional[Snowflake]
     created_at: str
     canceled_at: NotRequired[str]
-    country_code: Optional[str]
     trial_ends_at: NotRequired[str]
     metadata: NotRequired[Dict[str, Any]]
     latest_invoice: NotRequired[SubscriptionInvoice]
-    use_storekit_resubscribe: bool
-    price: Optional[int]
 
 
 class SubscriptionTrial(TypedDict):

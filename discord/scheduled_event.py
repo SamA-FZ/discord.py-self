@@ -25,10 +25,10 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, AsyncIterator, Dict, List, Optional, Union, overload, Literal
+from typing import TYPE_CHECKING, AsyncIterator, Dict, Optional, Union, overload, Literal
 
 from .asset import Asset
-from .enums import EventStatus, EntityType, PrivacyLevel, ReadStateType, try_enum
+from .enums import EventStatus, EntityType, PrivacyLevel, try_enum
 from .mixins import Hashable
 from .object import Object, OLDEST_OBJECT
 from .utils import parse_time, _get_as_snowflake, _bytes_to_base64_data, MISSING
@@ -58,6 +58,8 @@ __all__ = (
 class ScheduledEvent(Hashable):
     """Represents a scheduled event in a guild.
 
+    .. versionadded:: 2.0
+
     .. container:: operations
 
         .. describe:: x == y
@@ -71,8 +73,6 @@ class ScheduledEvent(Hashable):
         .. describe:: hash(x)
 
             Returns the scheduled event's hash.
-
-    .. versionadded:: 2.0
 
     Attributes
     ----------
@@ -100,12 +100,10 @@ class ScheduledEvent(Hashable):
         The user that created the scheduled event.
     creator_id: Optional[:class:`int`]
         The ID of the user that created the scheduled event.
+
+        .. versionadded:: 2.0
     location: Optional[:class:`str`]
         The location of the scheduled event.
-    sku_ids: List[:class:`int`]
-        The IDs of the SKUs associated with the ticketed scheduled event.
-
-        .. versionadded:: 2.1
     """
 
     __slots__ = (
@@ -127,7 +125,6 @@ class ScheduledEvent(Hashable):
         'channel_id',
         'creator_id',
         'location',
-        'sku_ids',
     )
 
     def __init__(self, *, state: ConnectionState, data: GuildScheduledEventPayload) -> None:
@@ -157,7 +154,6 @@ class ScheduledEvent(Hashable):
 
         self.end_time: Optional[datetime] = parse_time(data.get('scheduled_end_time'))
         self.channel_id: Optional[int] = _get_as_snowflake(data, 'channel_id')
-        self.sku_ids: List[int] = [int(sku_id) for sku_id in data.get('sku_ids', [])]
 
         metadata = data.get('entity_metadata')
         self._unroll_metadata(metadata)
@@ -189,14 +185,6 @@ class ScheduledEvent(Hashable):
     def url(self) -> str:
         """:class:`str`: The url for the scheduled event."""
         return f'https://discord.com/events/{self.guild_id}/{self.id}'
-
-    def is_acked(self) -> bool:
-        """:class:`bool`: Whether the scheduled event has been marked as read.
-
-        .. versionadded:: 2.1
-        """
-        read_state = self._state.get_read_state(self.guild_id, ReadStateType.scheduled_events)
-        return read_state.last_acked_id >= self.id if read_state.last_acked_id else False
 
     async def __modify_status(self, status: EventStatus, reason: Optional[str], /) -> ScheduledEvent:
         payload = {'status': status.value}
@@ -321,7 +309,6 @@ class ScheduledEvent(Hashable):
         privacy_level: PrivacyLevel = ...,
         status: EventStatus = ...,
         image: bytes = ...,
-        directory_broadcast: bool = ...,
         reason: Optional[str] = ...,
     ) -> ScheduledEvent:
         ...
@@ -339,7 +326,6 @@ class ScheduledEvent(Hashable):
         entity_type: Literal[EntityType.voice, EntityType.stage_instance],
         status: EventStatus = ...,
         image: bytes = ...,
-        directory_broadcast: bool = ...,
         reason: Optional[str] = ...,
     ) -> ScheduledEvent:
         ...
@@ -357,7 +343,6 @@ class ScheduledEvent(Hashable):
         status: EventStatus = ...,
         image: bytes = ...,
         location: str,
-        directory_broadcast: bool = ...,
         reason: Optional[str] = ...,
     ) -> ScheduledEvent:
         ...
@@ -374,7 +359,6 @@ class ScheduledEvent(Hashable):
         privacy_level: PrivacyLevel = ...,
         status: EventStatus = ...,
         image: bytes = ...,
-        directory_broadcast: bool = ...,
         reason: Optional[str] = ...,
     ) -> ScheduledEvent:
         ...
@@ -391,7 +375,6 @@ class ScheduledEvent(Hashable):
         status: EventStatus = ...,
         image: bytes = ...,
         location: str,
-        directory_broadcast: bool = ...,
         reason: Optional[str] = ...,
     ) -> ScheduledEvent:
         ...
@@ -409,7 +392,6 @@ class ScheduledEvent(Hashable):
         status: EventStatus = MISSING,
         image: bytes = MISSING,
         location: str = MISSING,
-        directory_broadcast: bool = MISSING,
         reason: Optional[str] = None,
     ) -> ScheduledEvent:
         r"""|coro|
@@ -457,11 +439,6 @@ class ScheduledEvent(Hashable):
             The new location of the scheduled event.
 
             Required if the entity type is :attr:`EntityType.external`.
-        directory_broadcast: :class:`bool`
-            Whether to broadcast the scheduled event to the directories the guild is in.
-            You should first check eligibility with :meth:`Guild.directory_broadcast_eligibility`.
-
-            .. versionadded:: 2.1
         reason: Optional[:class:`str`]
             The reason for editing the scheduled event. Shows up on the audit log.
 
@@ -503,7 +480,7 @@ class ScheduledEvent(Hashable):
 
         if privacy_level is not MISSING:
             if not isinstance(privacy_level, PrivacyLevel):
-                raise TypeError('privacy_level must be of type PrivacyLevel')
+                raise TypeError('privacy_level must be of type PrivacyLevel.')
 
             payload['privacy_level'] = privacy_level.value
 
@@ -534,7 +511,7 @@ class ScheduledEvent(Hashable):
 
         if entity_type is None:
             raise TypeError(
-                f'invalid GuildChannel type passed; must be VoiceChannel or StageChannel not {channel.__class__.__name__}'
+                f'invalid GuildChannel type passed, must be VoiceChannel or StageChannel not {channel.__class__.__name__}'
             )
 
         _entity_type = entity_type or self.entity_type
@@ -573,9 +550,6 @@ class ScheduledEvent(Hashable):
                 payload['scheduled_end_time'] = end_time.isoformat()
             else:
                 payload['scheduled_end_time'] = end_time
-
-        if directory_broadcast is not MISSING:
-            payload['broadcast_to_directory_channels'] = directory_broadcast
 
         if metadata:
             payload['entity_metadata'] = metadata
@@ -694,60 +668,11 @@ class ScheduledEvent(Hashable):
             count = 0
 
             for count, user in enumerate(users, 1):
-                if user.id not in self._users:
-                    self._add_user(user)
                 yield user
 
             if count < 100:
                 # There's no data left after this
                 break
-
-    async def rsvp(self) -> None:
-        """|coro|
-
-        Marks the current user as interested in this event.
-
-        .. versionadded:: 2.1
-
-        Raises
-        -------
-        HTTPException
-            RSVPing failed.
-        """
-        await self._state.http.create_scheduled_event_user(self.guild_id, self.id)
-
-    async def unrsvp(self) -> None:
-        """|coro|
-
-        Unmarks the current user as interested in this event.
-
-        .. versionadded:: 2.1
-
-        Raises
-        -------
-        HTTPException
-            Un-RSVPing failed.
-        """
-        await self._state.http.delete_scheduled_event_user(self.guild_id, self.id)
-
-    async def ack(self) -> None:
-        """|coro|
-
-        Marks this scheduled event as read.
-
-        .. note::
-
-            This sets the last acknowledged scheduled event to this event,
-            which will mark acknowledged events created after this one as unread.
-
-        .. versionadded:: 2.1
-
-        Raises
-        -------
-        HTTPException
-            Acking failed.
-        """
-        await self._state.http.ack_guild_feature(self.guild_id, ReadStateType.scheduled_events.value, self.id)
 
     def _add_user(self, user: User) -> None:
         self._users[user.id] = user

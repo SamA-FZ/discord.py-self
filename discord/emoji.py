@@ -256,12 +256,10 @@ class Emoji(_EmojiTag, AssetMixin):
         data = await self._state.http.edit_custom_emoji(self.guild_id, self.id, payload=payload, reason=reason)
         return Emoji(guild=self.guild, data=data, state=self._state)  # type: ignore # If guild is None, the http request would have failed
 
-    async def fetch_guild(self) -> Guild:
+    async def fetch_guild(self):
         """|coro|
 
         Retrieves the guild this emoji belongs to.
-
-        .. versionadded:: 1.9
 
         Raises
         ------
@@ -275,6 +273,8 @@ class Emoji(_EmojiTag, AssetMixin):
         :class:`Guild`
             The guild this emoji belongs to.
         """
+        from .guild import Guild  # Circular import
+
         state = self._state
         data = await state.http.get_emoji_guild(self.id)
-        return state.create_guild(data)
+        return Guild(state=state, data=data)

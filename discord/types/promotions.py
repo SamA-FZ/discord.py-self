@@ -57,7 +57,7 @@ class ClaimedPromotion(TypedDict):
 
 class TrialOffer(TypedDict):
     id: Snowflake
-    expires_at: Optional[str]
+    expires_at: str
     trial_id: Snowflake
     subscription_trial: SubscriptionTrial
 

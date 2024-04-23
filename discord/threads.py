@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import Callable, Dict, Iterable, List, Literal, Optional, Sequence, Union, TYPE_CHECKING
+from datetime import datetime
 import asyncio
 import array
 import copy
@@ -43,12 +44,10 @@ __all__ = (
 )
 
 if TYPE_CHECKING:
-    from datetime import date, datetime
+    from datetime import datetime
     from typing_extensions import Self
 
-    from .types.gateway import ThreadMemberListUpdateEvent
     from .types.threads import (
-        BaseThreadMember as BaseThreadMemberPayload,
         Thread as ThreadPayload,
         ThreadMember as ThreadMemberPayload,
         ThreadMetadata,
@@ -61,7 +60,6 @@ if TYPE_CHECKING:
     from .abc import Snowflake, SnowflakeTime
     from .role import Role
     from .state import ConnectionState
-    from .read_state import ReadState
 
 
 class Thread(Messageable, Hashable):
@@ -121,7 +119,7 @@ class Thread(Messageable, Hashable):
         Whether non-moderators can add other non-moderators to this thread.
         This is always ``True`` for public threads.
     auto_archive_duration: :class:`int`
-        The duration in minutes until the thread is automatically hidden from the channel list.
+        The duration in minutes until the thread is automatically archived due to inactivity.
         Usually a value of 60, 1440, 4320 and 10080.
     archive_timestamp: :class:`datetime.datetime`
         An aware timestamp of when the thread's archived status was last updated in UTC.
@@ -294,14 +292,6 @@ class Thread(Messageable, Hashable):
         return tags
 
     @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
-
-    @property
     def starter_message(self) -> Optional[Message]:
         """Returns the thread starter message from the cache.
 
@@ -336,69 +326,6 @@ class Thread(Messageable, Hashable):
             The last message in this channel or ``None`` if not found.
         """
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
-
-    @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last message ID that the user has acknowledged.
-        It may *not* point to an existing or valid message.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def acked_message(self) -> Optional[Message]:
-        """Retrieves the last message that the user has acknowledged in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.1
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last acknowledged message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`acked_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last acknowledged message in this channel or ``None`` if not found.
-        """
-        acked_message_id = self.acked_message_id
-        if acked_message_id is None:
-            return
-
-        # We need to check if the message is in the same channel
-        message = self._state._get_message(acked_message_id)
-        if message and message.channel.id == self.id:
-            return message
-
-    @property
-    def acked_pin_timestamp(self) -> Optional[datetime]:
-        """Optional[:class:`datetime.datetime`]: When the channel's pins were last acknowledged.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_pin_timestamp
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread mentions the user has in this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> date:
-        """:class:`datetime.date`: When the channel was last viewed.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_viewed  # type: ignore
 
     @property
     def category(self) -> Optional[CategoryChannel]:
@@ -671,7 +598,7 @@ class Thread(Messageable, Hashable):
             Whether non-moderators can add other non-moderators to this thread.
             Only available for private threads.
         auto_archive_duration: :class:`int`
-            The new duration in minutes before a thread is automatically hidden from the channel list.
+            The new duration in minutes before a thread is automatically archived for inactivity.
             Must be one of ``60``, ``1440``, ``4320``, or ``10080``.
         slowmode_delay: :class:`int`
             Specifies the slowmode rate limit for user in this thread, in seconds.
@@ -877,23 +804,18 @@ class Thread(Messageable, Hashable):
             All thread members in the thread.
         """
         state = self._state
-        await state.subscriptions.subscribe_to_threads(self.guild, self)
+        await state.ws.request_lazy_guild(self.parent.guild.id, thread_member_lists=[self.id])  # type: ignore
         future = state.ws.wait_for('thread_member_list_update', lambda d: int(d['thread_id']) == self.id)
-
         try:
-            data: ThreadMemberListUpdateEvent = await asyncio.wait_for(future, timeout=15)
+            data = await asyncio.wait_for(future, timeout=15)
         except asyncio.TimeoutError as exc:
             raise InvalidData('Didn\'t receieve a response from Discord') from exc
 
-        # Check if we are in the cache
-        _self = self.guild.get_thread(self.id)
-        if _self is not None:
-            return _self.members  # Includes correct self.me
-        else:
-            members = [ThreadMember(self, member) for member in data['members']]
-            for m in members:
-                self._add_member(m)
-            return self.members  # Includes correct self.me
+        members = [ThreadMember(self, {'member': member}) for member in data['members']]  # type: ignore
+        for m in members:
+            self._add_member(m)
+
+        return self.members  # Includes correct self.me
 
     async def delete(self) -> None:
         """|coro|
@@ -932,7 +854,7 @@ class Thread(Messageable, Hashable):
         return PartialMessage(channel=self, id=message_id)
 
     def _add_member(self, member: ThreadMember, /) -> None:
-        if member.id != self._state.self_id or self.me is None:
+        if member.id != self._state.self_id:
             self._members[member.id] = member
 
     def _pop_member(self, member_id: int, /) -> Optional[ThreadMember]:
@@ -970,10 +892,10 @@ class ThreadMember(Hashable):
         The thread's ID.
     joined_at: Optional[:class:`datetime.datetime`]
         The time the member joined the thread in UTC.
-        Only reliably available for yourself or members joined while the client is connected to the Gateway.
+        Only reliably available for yourself or members joined while the user is connected to the gateway.
     flags: :class:`int`
         The thread member's flags. Will be its own class in the future.
-        Only reliably available for yourself or members joined while the client is connected to the Gateway.
+        Only reliably available for yourself or members joined while the user is connected to the gateway.
     """
 
     __slots__ = (
@@ -985,16 +907,15 @@ class ThreadMember(Hashable):
         'parent',
     )
 
-    def __init__(self, parent: Thread, data: Union[BaseThreadMemberPayload, ThreadMemberPayload]) -> None:
+    def __init__(self, parent: Thread, data: ThreadMemberPayload) -> None:
         self.parent: Thread = parent
-        self.thread_id: int = parent.id
         self._state: ConnectionState = parent._state
         self._from_data(data)
 
     def __repr__(self) -> str:
         return f'<ThreadMember id={self.id} thread_id={self.thread_id} joined_at={self.joined_at!r}>'
 
-    def _from_data(self, data: Union[BaseThreadMemberPayload, ThreadMemberPayload]) -> None:
+    def _from_data(self, data: ThreadMemberPayload) -> None:
         state = self._state
 
         self.id: int
@@ -1003,19 +924,24 @@ class ThreadMember(Hashable):
         except KeyError:
             self.id = state.self_id  # type: ignore
 
+        self.thread_id: int
+        try:
+            self.thread_id = int(data['id'])
+        except KeyError:
+            self.thread_id = self.parent.id
+
         self.joined_at = parse_time(data.get('join_timestamp'))
         self.flags = data.get('flags')
 
-        guild = state._get_guild(self.parent.guild.id)
-        if not guild:
-            return
-
-        member_data = data.get('member')
-        if member_data is not None:
-            state._handle_member_update(guild, member_data)
-        presence = data.get('presence')
-        if presence is not None:
-            state._handle_presence_update(guild, presence)
+        if (mdata := data.get('member')) is not None:
+            guild = self.parent.guild
+            mdata['guild_id'] = guild.id
+            self.id = user_id = int(data['user_id'])
+            mdata['presence'] = data.get('presence')
+            if guild.get_member(user_id) is not None:
+                state.parse_guild_member_update(mdata)
+            else:
+                state.parse_guild_member_add(mdata)
 
     @property
     def thread(self) -> Thread:

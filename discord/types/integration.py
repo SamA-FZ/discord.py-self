@@ -27,10 +27,10 @@ from __future__ import annotations
 from typing import List, Literal, Optional, TypedDict, Union
 from typing_extensions import NotRequired
 
-from .application import IntegrationApplication, RoleConnectionMetadata
+from .application import IntegrationApplication
 from .guild import Guild
 from .snowflake import Snowflake
-from .user import APIUser
+from .user import User
 
 
 class IntegrationAccount(TypedDict):
@@ -54,7 +54,7 @@ IntegrationType = Literal['twitch', 'youtube', 'discord', 'guild_subscription']
 
 class BaseIntegration(PartialIntegration):
     enabled: bool
-    user: NotRequired[APIUser]
+    user: NotRequired[User]
 
 
 class StreamIntegration(BaseIntegration):
@@ -71,7 +71,6 @@ class StreamIntegration(BaseIntegration):
 class BotIntegration(BaseIntegration):
     application: IntegrationApplication
     scopes: List[str]
-    role_connections_metadata: NotRequired[List[RoleConnectionMetadata]]
 
 
 class ConnectionIntegration(BaseIntegration):

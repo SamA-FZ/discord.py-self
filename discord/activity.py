@@ -211,7 +211,6 @@ class Activity(BaseActivity):
         'application_id',
         'emoji',
         'buttons',
-        'metadata',
     )
 
     def __init__(self, **kwargs: Any) -> None:
@@ -227,8 +226,7 @@ class Activity(BaseActivity):
         self.flags: int = kwargs.pop('flags', 0)
         self.sync_id: Optional[str] = kwargs.pop('sync_id', None)
         self.session_id: Optional[str] = kwargs.pop('session_id', None)
-        self.buttons: Optional[List[str]] = kwargs.pop('buttons', None)
-        self.metadata: Optional[dict] = kwargs.pop('metadata', None)
+        self.buttons: List[str] = kwargs.pop('buttons', [])
 
         activity_type = kwargs.pop('type', -1)
         self.type: ActivityType = (

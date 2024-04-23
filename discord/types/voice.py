@@ -32,7 +32,7 @@ from .member import MemberWithUser
 SupportedModes = Literal['xsalsa20_poly1305_lite', 'xsalsa20_poly1305_suffix', 'xsalsa20_poly1305']
 
 
-class BaseVoiceState(TypedDict):
+class _VoiceState(TypedDict):
     user_id: Snowflake
     session_id: str
     deaf: bool
@@ -45,16 +45,13 @@ class BaseVoiceState(TypedDict):
     self_stream: NotRequired[bool]
 
 
-class VoiceState(BaseVoiceState):
+class GuildVoiceState(_VoiceState):
     channel_id: Snowflake
 
 
-class PrivateVoiceState(BaseVoiceState):
-    channel_id: Optional[Snowflake]
-
-
-class GuildVoiceState(PrivateVoiceState):
-    guild_id: Snowflake
+class VoiceState(_VoiceState, total=False):
+    channel_id: NotRequired[Optional[Snowflake]]
+    guild_id: NotRequired[Optional[Snowflake]]
 
 
 class VoiceRegion(TypedDict):

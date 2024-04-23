@@ -12,7 +12,7 @@ __title__ = 'discord.py-self'
 __author__ = 'Dolfies'
 __license__ = 'MIT'
 __copyright__ = 'Copyright 2015-present Rapptz and 2021-present Dolfies'
-__version__ = '2.1.0a'
+__version__ = '2.0.0'
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
@@ -34,17 +34,16 @@ from .colour import *
 from .commands import *
 from .components import *
 from .connections import *
-from .directory import *
 from .embeds import *
 from .emoji import *
 from .entitlements import *
 from .enums import *
 from .errors import *
-from .experiment import *
 from .file import *
 from .flags import *
 from .guild import *
 from .guild_premium import *
+from .handlers import *
 from .integrations import *
 from .interactions import *
 from .invite import *
@@ -55,7 +54,6 @@ from .message import *
 from .metadata import *
 from .modal import *
 from .object import *
-from .oauth2 import *
 from .partial_emoji import *
 from .payments import *
 from .permissions import *
@@ -63,7 +61,6 @@ from .player import *
 from .profile import *
 from .promotions import *
 from .raw_models import *
-from .read_state import *
 from .reaction import *
 from .relationship import *
 from .role import *
@@ -76,7 +73,7 @@ from .subscriptions import *
 from .team import *
 from .template import *
 from .threads import *
-from .tutorial import *
+from .tracking import *
 from .user import *
 from .voice_client import *
 from .webhook import *
@@ -92,7 +89,7 @@ class _VersionInfo(NamedTuple):
     serial: int
 
 
-version_info: _VersionInfo = _VersionInfo(major=2, minor=1, micro=0, releaselevel='alpha', serial=0)
+version_info: _VersionInfo = _VersionInfo(major=2, minor=0, micro=0, releaselevel='final', serial=0)
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 

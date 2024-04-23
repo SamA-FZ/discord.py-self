@@ -175,6 +175,7 @@ class Embed:
         description: Optional[Any] = None,
         timestamp: Optional[datetime.datetime] = None,
     ):
+
         self.colour = colour if colour is not None else color
         self.title: Optional[str] = title
         self.type: EmbedType = type

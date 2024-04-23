@@ -24,11 +24,11 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
+from typing import Any, Dict, Optional, TYPE_CHECKING, Union
 import re
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
-from . import utils
 from .asset import Asset, AssetMixin
+from . import utils
 
 # fmt: off
 __all__ = (
@@ -37,14 +37,12 @@ __all__ = (
 # fmt: on
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from typing_extensions import Self
 
-    from .guild import Guild
     from .state import ConnectionState
-    from .types.activity import ActivityEmoji
+    from datetime import datetime
     from .types.emoji import Emoji as EmojiPayload, PartialEmoji as PartialEmojiPayload
+    from .types.activity import ActivityEmoji
 
 
 class _EmojiTag:
@@ -96,7 +94,7 @@ class PartialEmoji(_EmojiTag, AssetMixin):
 
     __slots__ = ('animated', 'name', 'id', '_state')
 
-    _CUSTOM_EMOJI_RE = re.compile(r'<?(?:(?P<animated>a)?:)?(?P<name>[A-Za-z0-9\_]+):(?P<id>[0-9]{13,20})>?')
+    _CUSTOM_EMOJI_RE = re.compile(r'<?(?P<animated>a)?:?(?P<name>[A-Za-z0-9\_]+):(?P<id>[0-9]{13,20})>?')
 
     if TYPE_CHECKING:
         id: Optional[int]
@@ -114,14 +112,6 @@ class PartialEmoji(_EmojiTag, AssetMixin):
             id=utils._get_as_snowflake(data, 'id'),
             name=data.get('name') or '',
         )
-
-    @classmethod
-    def from_dict_stateful(
-        cls, data: Union[PartialEmojiPayload, ActivityEmoji, Dict[str, Any]], state: ConnectionState
-    ) -> Self:
-        self = cls.from_dict(data)
-        self._state = state
-        return self
 
     @classmethod
     def from_str(cls, value: str) -> Self:
@@ -278,12 +268,10 @@ class PartialEmoji(_EmojiTag, AssetMixin):
 
         return await super().read()
 
-    async def fetch_guild(self) -> Guild:
+    async def fetch_guild(self):
         """|coro|
 
         Retrieves the guild this emoji belongs to.
-
-        .. versionadded:: 1.9
 
         Raises
         ------
@@ -301,6 +289,8 @@ class PartialEmoji(_EmojiTag, AssetMixin):
         :class:`Guild`
             The guild this emoji belongs to.
         """
+        from .guild import Guild  # Circular import
+
         if self.id is None:
             raise ValueError('PartialEmoji is not a custom emoji')
         if self._state is None:
@@ -308,4 +298,4 @@ class PartialEmoji(_EmojiTag, AssetMixin):
 
         state = self._state
         data = await state.http.get_emoji_guild(self.id)
-        return state.create_guild(data)
+        return Guild(state=state, data=data)

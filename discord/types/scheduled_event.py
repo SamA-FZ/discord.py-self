@@ -47,7 +47,6 @@ class _BaseGuildScheduledEvent(TypedDict):
     creator: NotRequired[User]
     user_count: NotRequired[int]
     image: NotRequired[Optional[str]]
-    sku_ids: List[Snowflake]
 
 
 class _VoiceChannelScheduledEvent(_BaseGuildScheduledEvent):
@@ -99,18 +98,17 @@ GuildScheduledEventWithUserCount = Union[
 ]
 
 
-class UserWithMember(User):
+class ScheduledEventUser(User):
+    ...
+
+
+class ScheduledEventUserWithMember(ScheduledEventUser):
     guild_member: Member
 
 
 class ScheduledEventUsers(TypedDict):
-    users: List[User]
+    users: List[ScheduledEventUser]
 
 
 class ScheduledEventUsersWithMember(TypedDict):
-    users: List[UserWithMember]
-
-
-class SubscribedGuildScheduledEvent(TypedDict):
-    guild_scheduled_event_id: Snowflake
-    user_id: Snowflake
+    users: ScheduledEventUserWithMember

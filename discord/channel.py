@@ -43,46 +43,33 @@ from typing import (
     overload,
 )
 import datetime
-from operator import attrgetter
 
 import discord.abc
 from .scheduled_event import ScheduledEvent
 from .permissions import PermissionOverwrite, Permissions
-from .enums import (
-    ChannelType,
-    EntityType,
-    ForumLayoutType,
-    ForumOrderType,
-    PrivacyLevel,
-    try_enum,
-    VideoQualityMode,
-    DirectoryCategory,
-    DirectoryEntryType,
-)
+from .enums import ChannelType, EntityType, ForumLayoutType, ForumOrderType, PrivacyLevel, try_enum, VideoQualityMode
 from .calls import PrivateCall, GroupCall
 from .mixins import Hashable
 from . import utils
 from .utils import MISSING
 from .asset import Asset
-from .errors import ClientException, DiscordException
+from .errors import ClientException
 from .stage_instance import StageInstance
 from .threads import Thread
 from .partial_emoji import _EmojiTag, PartialEmoji
-from .flags import ChannelFlags, MessageFlags
+from .flags import ChannelFlags
 from .http import handle_message_parameters
 from .invite import Invite
 from .voice_client import VoiceClient
-from .directory import DirectoryEntry
 
 __all__ = (
     'TextChannel',
     'VoiceChannel',
     'StageChannel',
+    'DMChannel',
     'CategoryChannel',
     'ForumTag',
     'ForumChannel',
-    'DirectoryChannel',
-    'DMChannel',
     'GroupChannel',
     'PartialMessageable',
 )
@@ -105,20 +92,18 @@ if TYPE_CHECKING:
     from .user import BaseUser, ClientUser, User
     from .guild import Guild, GuildChannel as GuildChannelType
     from .settings import ChannelSettings
-    from .read_state import ReadState
     from .types.channel import (
         TextChannel as TextChannelPayload,
         NewsChannel as NewsChannelPayload,
         VoiceChannel as VoiceChannelPayload,
         StageChannel as StageChannelPayload,
-        DirectoryChannel as DirectoryChannelPayload,
         DMChannel as DMChannelPayload,
         CategoryChannel as CategoryChannelPayload,
         GroupDMChannel as GroupChannelPayload,
         ForumChannel as ForumChannelPayload,
         ForumTag as ForumTagPayload,
     )
-    from .types.oauth2 import WebhookChannel as WebhookChannelPayload
+
     from .types.snowflake import SnowflakeList
 
     OverwriteKeyT = TypeVar('OverwriteKeyT', Role, BaseUser, Object, Union[Role, Member, Object])
@@ -289,14 +274,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         return self._type == ChannelType.news.value
 
     @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
-
-    @property
     def last_message(self) -> Optional[Message]:
         """Retrieves the last message from this channel in cache.
 
@@ -316,69 +293,6 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             The last message in this channel or ``None`` if not found.
         """
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
-
-    @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last message ID that the user has acknowledged.
-        It may *not* point to an existing or valid message.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def acked_message(self) -> Optional[Message]:
-        """Retrieves the last message that the user has acknowledged in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.1
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last acknowledged message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`acked_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last acknowledged message in this channel or ``None`` if not found.
-        """
-        acked_message_id = self.acked_message_id
-        if acked_message_id is None:
-            return
-
-        # We need to check if the message is in the same channel
-        message = self._state._get_message(acked_message_id)
-        if message and message.channel.id == self.id:
-            return message
-
-    @property
-    def acked_pin_timestamp(self) -> Optional[datetime.datetime]:
-        """Optional[:class:`datetime.datetime`]: When the channel's pins were last acknowledged.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_pin_timestamp
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread mentions the user has in this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> datetime.date:
-        """:class:`datetime.date`: When the channel was last viewed.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_viewed  # type: ignore
 
     @overload
     async def edit(self) -> Optional[TextChannel]:
@@ -808,7 +722,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             If ``None`` is passed then a private thread is created.
             Defaults to ``None``.
         auto_archive_duration: :class:`int`
-            The duration in minutes before a thread is automatically hidden from the channel list.
+            The duration in minutes before a thread is automatically archived for inactivity.
             If not provided, the channel's default auto archive duration is used.
 
             Must be one of ``60``, ``1440``, ``4320``, or ``10080``, if provided.
@@ -847,7 +761,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
                 self.id,
                 name=name,
                 auto_archive_duration=auto_archive_duration or self.default_auto_archive_duration,
-                type=type.value,  # type: ignore # we're assuming that the user is passing a valid variant
+                type=type.value,
                 reason=reason,
                 invitable=invitable,
                 rate_limit_per_user=slowmode_delay,
@@ -1075,14 +989,6 @@ class VocalGuildChannel(discord.abc.Messageable, discord.abc.Connectable, discor
         return base
 
     @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
-
-    @property
     def last_message(self) -> Optional[Message]:
         """Retrieves the last message from this channel in cache.
 
@@ -1104,69 +1010,6 @@ class VocalGuildChannel(discord.abc.Messageable, discord.abc.Connectable, discor
             The last message in this channel or ``None`` if not found.
         """
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
-
-    @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last message ID that the user has acknowledged.
-        It may *not* point to an existing or valid message.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def acked_message(self) -> Optional[Message]:
-        """Retrieves the last message that the user has acknowledged in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.1
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last acknowledged message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`acked_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last acknowledged message in this channel or ``None`` if not found.
-        """
-        acked_message_id = self.acked_message_id
-        if acked_message_id is None:
-            return
-
-        # We need to check if the message is in the same channel
-        message = self._state._get_message(acked_message_id)
-        if message and message.channel.id == self.id:
-            return message
-
-    @property
-    def acked_pin_timestamp(self) -> Optional[datetime.datetime]:
-        """Optional[:class:`datetime.datetime`]: When the channel's pins were last acknowledged.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_pin_timestamp
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread mentions the user has in this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> datetime.date:
-        """:class:`datetime.date`: When the channel was last viewed.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_viewed  # type: ignore
 
     def get_partial_message(self, message_id: int, /) -> PartialMessage:
         """Creates a :class:`PartialMessage` from the message ID.
@@ -1763,12 +1606,16 @@ class StageChannel(VocalGuildChannel):
         :class:`StageInstance`
             The newly created stage instance.
         """
-        payload = {'channel_id': self.id, 'topic': topic, 'send_start_notification': send_start_notification}
+
+        payload: Dict[str, Any] = {'channel_id': self.id, 'topic': topic}
+
         if privacy_level is not MISSING:
             if not isinstance(privacy_level, PrivacyLevel):
                 raise TypeError('privacy_level field must be of type PrivacyLevel')
 
             payload['privacy_level'] = privacy_level.value
+
+        payload['send_start_notification'] = send_start_notification
 
         data = await self._state.http.create_stage_instance(**payload, reason=reason)
         return StageInstance(guild=self.guild, state=self._state, data=data)
@@ -1809,7 +1656,6 @@ class StageChannel(VocalGuildChannel):
         *,
         name: str = ...,
         nsfw: bool = ...,
-        user_limit: int = ...,
         position: int = ...,
         sync_permissions: int = ...,
         category: Optional[CategoryChannel] = ...,
@@ -1849,8 +1695,6 @@ class StageChannel(VocalGuildChannel):
             The new channel's position.
         nsfw: :class:`bool`
             To mark the channel as NSFW or not.
-        user_limit: :class:`int`
-            The new channel's user limit.
         sync_permissions: :class:`bool`
             Whether to sync permissions with the channel's new or pre-existing
             category. Defaults to ``False``.
@@ -2073,14 +1917,14 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
     def text_channels(self) -> List[TextChannel]:
         """List[:class:`TextChannel`]: Returns the text channels that are under this category."""
         ret = [c for c in self.guild.channels if c.category_id == self.id and isinstance(c, TextChannel)]
-        ret.sort(key=attrgetter('position', 'id'))
+        ret.sort(key=lambda c: (c.position, c.id))
         return ret
 
     @property
     def voice_channels(self) -> List[VoiceChannel]:
         """List[:class:`VoiceChannel`]: Returns the voice channels that are under this category."""
         ret = [c for c in self.guild.channels if c.category_id == self.id and isinstance(c, VoiceChannel)]
-        ret.sort(key=attrgetter('position', 'id'))
+        ret.sort(key=lambda c: (c.position, c.id))
         return ret
 
     @property
@@ -2090,38 +1934,8 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
         .. versionadded:: 1.7
         """
         ret = [c for c in self.guild.channels if c.category_id == self.id and isinstance(c, StageChannel)]
-        ret.sort(key=attrgetter('position', 'id'))
+        ret.sort(key=lambda c: (c.position, c.id))
         return ret
-
-    @property
-    def forums(self) -> List[ForumChannel]:
-        """List[:class:`ForumChannel`]: Returns the forum channels that are under this category.
-
-        .. versionadded:: 2.1
-        """
-        ret = [c for c in self.guild.channels if c.category_id == self.id and isinstance(c, ForumChannel)]
-        ret.sort(key=attrgetter('position', 'id'))
-        return ret
-
-    @property
-    def directory_channels(self) -> List[DirectoryChannel]:
-        """List[:class:`DirectoryChannel`]: Returns the directory channels that are under this category.
-
-        .. versionadded:: 2.1
-        """
-        ret = [c for c in self.guild.channels if c.category_id == self.id and isinstance(c, DirectoryChannel)]
-        ret.sort(key=attrgetter('position', 'id'))
-        return ret
-
-    @property
-    def directories(self) -> List[DirectoryChannel]:
-        """List[:class:`DirectoryChannel`]: Returns the directory channels that are under this category.
-
-        An alias for :attr:`directory_channels`.
-
-        .. versionadded:: 2.1
-        """
-        return self.directory_channels
 
     async def create_text_channel(self, name: str, **options: Any) -> TextChannel:
         """|coro|
@@ -2161,22 +1975,6 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
         """
         return await self.guild.create_stage_channel(name, category=self, **options)
 
-    async def create_directory(self, name: str, **options: Any) -> DirectoryChannel:
-        """|coro|
-
-        A shortcut method to :meth:`Guild.create_directory` to create a :class:`DirectoryChannel` in the category.
-
-        .. versionadded:: 2.1
-
-        Returns
-        --------
-        :class:`DirectoryChannel`
-            The channel that was just created.
-        """
-        return await self.guild.create_directory(name, category=self, **options)
-
-    create_directory_channel = create_directory
-
     async def create_forum(self, name: str, **options: Any) -> ForumChannel:
         """|coro|
 
@@ -2190,8 +1988,6 @@ class CategoryChannel(discord.abc.GuildChannel, Hashable):
             The channel that was just created.
         """
         return await self.guild.create_forum(name, category=self, **options)
-
-    create_forum_channel = create_forum
 
 
 class ForumTag(Hashable):
@@ -2231,29 +2027,23 @@ class ForumTag(Hashable):
         Note that if the emoji is a custom emoji, it will *not* have name information.
     """
 
-    __slots__ = ('name', 'id', 'moderated', 'emoji', '_state', '_channel_id')
+    __slots__ = ('name', 'id', 'moderated', 'emoji')
 
     def __init__(self, *, name: str, emoji: Optional[EmojiInputType] = None, moderated: bool = False) -> None:
-        self._state = None
-        self._channel_id: Optional[int] = None
         self.name: str = name
         self.id: int = 0
         self.moderated: bool = moderated
         self.emoji: Optional[PartialEmoji] = None
         if isinstance(emoji, _EmojiTag):
             self.emoji = emoji._to_partial()
-            if not self._state and emoji._state:
-                self._state = emoji._state
         elif isinstance(emoji, str):
             self.emoji = PartialEmoji.from_str(emoji)
         elif emoji is not None:
             raise TypeError(f'emoji must be a Emoji, PartialEmoji, str or None not {emoji.__class__.__name__}')
 
     @classmethod
-    def from_data(cls, *, state: ConnectionState, data: ForumTagPayload, channel_id: int) -> Self:
+    def from_data(cls, *, state: ConnectionState, data: ForumTagPayload) -> Self:
         self = cls.__new__(cls)
-        self._state = state
-        self._channel_id = channel_id
         self.name = data['name']
         self.id = int(data['id'])
         self.moderated = data.get('moderated', False)
@@ -2286,79 +2076,6 @@ class ForumTag(Hashable):
 
     def __str__(self) -> str:
         return self.name
-
-    async def edit(
-        self,
-        *,
-        name: str = MISSING,
-        emoji: Optional[PartialEmoji] = MISSING,
-        moderated: bool = MISSING,
-        reason: Optional[str] = None,
-    ) -> ForumTag:
-        """|coro|
-
-        Edits this forum tag.
-
-        .. versionadded:: 2.1
-
-        Parameters
-        ----------
-        name: :class:`str`
-            The name of the tag. Can only be up to 20 characters.
-        emoji: Optional[Union[:class:`str`, :class:`PartialEmoji`]]
-            The emoji to use for the tag.
-        moderated: :class:`bool`
-            Whether the tag can only be applied by moderators.
-        reason: Optional[:class:`str`]
-            The reason for creating this tag. Shows up on the audit log.
-
-        Raises
-        -------
-        DiscordException
-            There is no internal connection state.
-        Forbidden
-            You do not have permissions to edit this forum tag.
-        HTTPException
-            Editing the forum tag failed.
-
-        Returns
-        --------
-        :class:`ForumTag`
-            The newly edited forum tag.
-        """
-        if not self._state or not self._channel_id:
-            raise DiscordException('Invalid state (no ConnectionState provided)')
-        result = ForumTag(
-            name=name or self.name,
-            emoji=emoji if emoji is not MISSING else self.emoji,
-            moderated=moderated if moderated is not MISSING else self.moderated,
-        )
-        result._state = self._state
-        result._channel_id = self._channel_id
-        await self._state.http.edit_forum_tag(self._channel_id, self.id, **result.to_dict(), reason=reason)
-
-        result.id = self.id
-        return result
-
-    async def delete(self) -> None:
-        """|coro|
-
-        Deletes this forum tag.
-
-        .. versionadded:: 2.1
-
-        Raises
-        -------
-        DiscordException
-            There is no internal connection state.
-        Forbidden
-            You do not have permissions to delete this forum tag.
-        HTTPException
-            Deleting the forum tag failed.
-        """
-        if not self._state or not self._channel_id:
-            raise DiscordException('Invalid state (no ConnectionState provided)')
-        await self._state.http.delete_forum_tag(self._channel_id, self.id)
 
 
 class ForumChannel(discord.abc.GuildChannel, Hashable):
@@ -2474,9 +2191,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         self.default_auto_archive_duration: ThreadArchiveDuration = data.get('default_auto_archive_duration', 1440)
         self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
         # This takes advantage of the fact that dicts are ordered since Python 3.7
-        tags = [
-            ForumTag.from_data(state=self._state, data=tag, channel_id=self.id) for tag in data.get('available_tags', [])
-        ]
+        tags = [ForumTag.from_data(state=self._state, data=tag) for tag in data.get('available_tags', [])]
         self.default_thread_slowmode_delay: int = data.get('default_thread_rate_limit_per_user', 0)
         self.default_layout: ForumLayoutType = try_enum(ForumLayoutType, data.get('default_forum_layout', 0))
         self._available_tags: Dict[int, ForumTag] = {tag.id: tag for tag in tags}
@@ -2777,12 +2492,15 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         :class:`ForumTag`
             The newly created tag.
         """
+
+        prior = list(self._available_tags.values())
         result = ForumTag(name=name, emoji=emoji, moderated=moderated)
-        result._state = self._state
-        result._channel_id = self.id
-        payload = await self._state.http.create_forum_tag(self.id, **result.to_dict(), reason=reason)
+        prior.append(result)
+        payload = await self._state.http.edit_channel(
+            self.id, reason=reason, available_tags=[tag.to_dict() for tag in prior]
+        )
         try:
-            result.id = int(payload['available_tags'][-1]['id'])
+            result.id = int(payload['available_tags'][-1]['id'])  # type: ignore
         except (KeyError, IndexError, ValueError):
             pass
 
@@ -2820,7 +2538,7 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
         name: :class:`str`
             The name of the thread.
         auto_archive_duration: :class:`int`
-            The duration in minutes before a thread is automatically hidden from the channel list.
+            The duration in minutes before a thread is automatically archived for inactivity.
             If not provided, the channel's default auto archive duration is used.
 
             Must be one of ``60``, ``1440``, ``4320``, or ``10080``, if provided.
@@ -2881,6 +2599,8 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             sticker_ids: SnowflakeList = [s.id for s in stickers]
 
         if suppress_embeds:
+            from .message import MessageFlags  # circular import
+
             flags = MessageFlags._from_value(4)
         else:
             flags = MISSING
@@ -2909,9 +2629,12 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             flags=flags,
             channel_payload=channel_payload,
         ) as params:
+            # Circular import
+            from .message import Message
+
             data = await state.http.start_thread_in_forum(self.id, params=params, reason=reason)
             thread = Thread(guild=self.guild, state=self._state, data=data)
-            message = state.create_message(channel=thread, data=data['message'])
+            message = Message(state=self._state, channel=thread, data=data['message'])
 
             return ThreadWithMessage(thread=thread, message=message)
 
@@ -3042,372 +2765,6 @@ class ForumChannel(discord.abc.GuildChannel, Hashable):
             before_timestamp = update_before(threads[-1])
 
 
-class DirectoryChannel(discord.abc.GuildChannel, Hashable):
-    """Represents a directory channel.
-
-    These channels hold entries for guilds attached to a directory (such as a Student Hub).
-
-    .. container:: operations
-
-        .. describe:: x == y
-
-            Checks if two channels are equal.
-
-        .. describe:: x != y
-
-            Checks if two channels are not equal.
-
-        .. describe:: hash(x)
-
-            Returns the channel's hash.
-
-        .. describe:: str(x)
-
-            Returns the channel's name.
-
-    .. versionadded:: 2.1
-
-    Attributes
-    ----------
-    name: :class:`str`
-        The channel name.
-    guild: :class:`Guild`
-        The guild the channel belongs to.
-    id: :class:`int`
-        The channel ID.
-    category_id: Optional[:class:`int`]
-        The category channel ID this channel belongs to, if applicable.
-    topic: Optional[:class:`str`]
-        The channel's topic. ``None`` if it doesn't exist.
-    position: :class:`int`
-        The position in the channel list. This is a number that starts at 0. e.g. the
-        top channel is position 0.
-    last_message_id: Optional[:class:`int`]
-        The last directory entry ID that was created on this channel. It may
-        *not* point to an existing or valid directory entry.
-    """
-
-    __slots__ = (
-        'name',
-        'id',
-        'guild',
-        'topic',
-        '_state',
-        'category_id',
-        'position',
-        '_overwrites',
-        'last_message_id',
-    )
-
-    def __init__(self, *, state: ConnectionState, guild: Guild, data: DirectoryChannelPayload):
-        self._state: ConnectionState = state
-        self.id: int = int(data['id'])
-        self._update(guild, data)
-
-    def __repr__(self) -> str:
-        attrs = [
-            ('id', self.id),
-            ('name', self.name),
-            ('position', self.position),
-            ('category_id', self.category_id),
-        ]
-        joined = ' '.join('%s=%r' % t for t in attrs)
-        return f'<{self.__class__.__name__} {joined}>'
-
-    def _update(self, guild: Guild, data: DirectoryChannelPayload) -> None:
-        self.guild: Guild = guild
-        self.name: str = data['name']
-        self.category_id: Optional[int] = utils._get_as_snowflake(data, 'parent_id')
-        self.topic: Optional[str] = data.get('topic')
-        self.position: int = data['position']
-        self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
-        self._fill_overwrites(data)
-
-    async def _get_channel(self) -> Self:
-        return self
-
-    @property
-    def type(self) -> ChannelType:
-        """:class:`ChannelType`: The channel's Discord type."""
-        return ChannelType.directory
-
-    @property
-    def _sorting_bucket(self) -> int:
-        return ChannelType.directory.value
-
-    @property
-    def _scheduled_event_entity_type(self) -> Optional[EntityType]:
-        return None
-
-    @utils.copy_doc(discord.abc.GuildChannel.permissions_for)
-    def permissions_for(self, obj: Union[Member, Role], /) -> Permissions:
-        base = super().permissions_for(obj)
-        self._apply_implicit_permissions(base)
-
-        # text channels do not have voice related permissions
-        denied = Permissions.voice()
-        base.value &= ~denied.value
-        return base
-
-    @property
-    def members(self) -> List[Member]:
-        """List[:class:`Member`]: Returns all members that can see this channel."""
-        return [m for m in self.guild.members if self.permissions_for(m).read_messages]
-
-    @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel."""
-        return self._state.get_read_state(self.id)
-
-    @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last directory entry ID that the user has acknowledged.
-        It may *not* point to an existing or valid directory entry.
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread directory entries the user has in this channel."""
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> datetime.date:
-        """:class:`datetime.date`: When the channel was last viewed."""
-        return self.read_state.last_viewed  # type: ignore
-
-    @overload
-    async def edit(self) -> Optional[DirectoryChannel]:
-        ...
-
-    @overload
-    async def edit(self, *, position: int, reason: Optional[str] = ...) -> None:
-        ...
-
-    @overload
-    async def edit(
-        self,
-        *,
-        reason: Optional[str] = ...,
-        name: str = ...,
-        topic: str = ...,
-        position: int = ...,
-        sync_permissions: bool = ...,
-        category: Optional[CategoryChannel] = ...,
-        overwrites: Mapping[OverwriteKeyT, PermissionOverwrite] = ...,
-    ) -> DirectoryChannel:
-        ...
-
-    async def edit(self, *, reason: Optional[str] = None, **options: Any) -> Optional[DirectoryChannel]:
-        """|coro|
-
-        Edits the channel.
-
-        You must have :attr:`~Permissions.manage_channels` to do this.
-
-        Parameters
-        ----------
-        name: :class:`str`
-            The new channel name.
-        topic: :class:`str`
-            The new channel's topic.
-        position: :class:`int`
-            The new channel's position.
-        sync_permissions: :class:`bool`
-            Whether to sync permissions with the channel's new or pre-existing
-            category. Defaults to ``False``.
-        category: Optional[:class:`CategoryChannel`]
-            The new category for this channel. Can be ``None`` to remove the
-            category.
-        reason: Optional[:class:`str`]
-            The reason for editing this channel. Shows up on the audit log.
-        overwrites: :class:`Mapping`
-            A :class:`Mapping` of target (either a role or a member) to
-            :class:`PermissionOverwrite` to apply to the channel.
-
-        Raises
-        ------
-        ValueError
-            The new ``position`` is less than 0 or greater than the number of channels.
-        TypeError
-            The permission overwrite information is not in proper form.
-        Forbidden
-            You do not have permissions to edit the channel.
-        HTTPException
-            Editing the channel failed.
-
-        Returns
-        --------
-        Optional[:class:`.DirectoryChannel`]
-            The newly edited directory channel. If the edit was only positional
-            then ``None`` is returned instead.
-        """
-        payload = await self._edit(options, reason=reason)
-        if payload is not None:
-            # the payload will always be the proper channel payload
-            return self.__class__(state=self._state, guild=self.guild, data=payload)  # type: ignore
-
-    @utils.copy_doc(discord.abc.GuildChannel.clone)
-    async def clone(self, *, name: Optional[str] = None, reason: Optional[str] = None) -> DirectoryChannel:
-        return await self._clone_impl({'topic': self.topic}, name=name, reason=reason)
-
-    async def counts(self) -> Dict[DirectoryCategory, int]:
-        """|coro|
-
-        Gets the number of entries in each category.
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to get the counts.
-        HTTPException
-            Getting the counts failed.
-
-        Returns
-        --------
-        Dict[:class:`DirectoryCategory`, :class:`int`]
-            The counts for each category.
-        """
-        data = await self._state.http.get_directory_counts(self.id)
-        return {try_enum(DirectoryCategory, int(k)): v for k, v in data.items()}
-
-    async def entries(
-        self,
-        *,
-        type: Optional[DirectoryEntryType] = None,
-        category: Optional[DirectoryCategory] = None,
-    ) -> List[DirectoryEntry]:
-        """|coro|
-
-        Gets the directory entries in this channel.
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to get the entries.
-        HTTPException
-            Getting the entries failed.
-
-        Returns
-        --------
-        List[:class:`DirectoryEntry`]
-            The entries in this channel.
-        """
-        state = self._state
-        data = await state.http.get_directory_entries(
-            self.id, type=type.value if type else None, category_id=category.value if category else None
-        )
-        return [DirectoryEntry(state=state, data=e, channel=self) for e in data]
-
-    async def fetch_entries(self, *entity_ids: int) -> List[DirectoryEntry]:
-        r"""|coro|
-
-        Gets a list of partial directory entries by their IDs.
-
-        .. note::
-
-            These :class:`DirectoryEntry` objects do not have :attr:`DirectoryEntry.guild`.
-
-        Parameters
-        -----------
-        \*entity_ids: :class:`int`
-            The IDs of the entries to fetch.
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to get the entries.
-        HTTPException
-            Getting the entries failed.
-
-        Returns
-        --------
-        List[:class:`DirectoryEntry`]
-            The entries in this channel.
-        """
-        if not entity_ids:
-            return []
-
-        state = self._state
-        data = await state.http.get_some_directory_entries(self.id, entity_ids)
-        return [DirectoryEntry(state=state, data=e, channel=self) for e in data]
-
-    async def search_entries(
-        self,
-        query: str,
-        /,
-        *,
-        category: Optional[DirectoryCategory] = None,
-    ) -> List[DirectoryEntry]:
-        """|coro|
-
-        Searches for directory entries in this channel.
-
-        Parameters
-        -----------
-        query: :class:`str`
-            The query to search for.
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to search the entries.
-        HTTPException
-            Searching the entries failed.
-
-        Returns
-        --------
-        List[:class:`DirectoryEntry`]
-            The entries in this channel.
-        """
-        state = self._state
-        data = await state.http.search_directory_entries(self.id, query, category_id=category.value if category else None)
-        return [DirectoryEntry(state=state, data=e, channel=self) for e in data]
-
-    async def create_entry(
-        self,
-        guild: Snowflake,
-        *,
-        category: DirectoryCategory = DirectoryCategory.uncategorized,
-        description: Optional[str] = None,
-    ) -> DirectoryEntry:
-        """|coro|
-
-        Creates a directory entry in this channel.
-
-        Parameters
-        -----------
-        guild: :class:`Guild`
-            The guild to create the entry for.
-        category: :class:`DirectoryCategory`
-            The category to create the entry in.
-        description: Optional[:class:`str`]
-            The description of the entry.
-
-        Raises
-        -------
-        Forbidden
-            You don't have permissions to create the entry.
-        HTTPException
-            Creating the entry failed.
-
-        Returns
-        --------
-        :class:`DirectoryEntry`
-            The created entry.
-        """
-        # While the API supports `type`, only guilds seem to be supported at the moment
-        # So we hide all that from the user and just accept a `guild`
-        state = self._state
-        data = await state.http.create_directory_entry(
-            self.id,
-            guild.id,
-            primary_category_id=(category or DirectoryCategory.uncategorized).value,
-            description=description or '',
-        )
-        return DirectoryEntry(state=state, data=data, channel=self)
-
-
 class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.PrivateChannel, Hashable):
     """Represents a Discord direct message channel.
 
@@ -3458,6 +2815,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
         '_requested_at',
         '_spam',
         '_state',
+        '_accessed',
     )
 
     def __init__(self, *, me: ClientUser, state: ConnectionState, data: DMChannelPayload):
@@ -3466,6 +2824,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
         self.me: ClientUser = me
         self.id: int = int(data['id'])
         self._update(data)
+        self._accessed: bool = False
 
     def _update(self, data: DMChannelPayload) -> None:
         self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
@@ -3484,6 +2843,9 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
         return PrivateCall(**kwargs)
 
     async def _get_channel(self) -> Self:
+        if not self._accessed:
+            await self._state.call_connect(self.id)
+            self._accessed = True
         return self
 
     async def _initial_ring(self) -> None:
@@ -3550,14 +2912,6 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
         return f'https://discord.com/channels/@me/{self.id}'
 
     @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
-
-    @property
     def last_message(self) -> Optional[Message]:
         """Retrieves the last message from this channel in cache.
 
@@ -3579,69 +2933,6 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
 
     @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last message ID that the user has acknowledged.
-        It may *not* point to an existing or valid message.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def acked_message(self) -> Optional[Message]:
-        """Retrieves the last message that the user has acknowledged in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.1
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last acknowledged message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`acked_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last acknowledged message in this channel or ``None`` if not found.
-        """
-        acked_message_id = self.acked_message_id
-        if acked_message_id is None:
-            return
-
-        # We need to check if the message is in the same channel
-        message = self._state._get_message(acked_message_id)
-        if message and message.channel.id == self.id:
-            return message
-
-    @property
-    def acked_pin_timestamp(self) -> Optional[datetime.datetime]:
-        """Optional[:class:`datetime.datetime`]: When the channel's pins were last acknowledged.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_pin_timestamp
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread mentions the user has in this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> datetime.date:
-        """:class:`datetime.date`: When the channel was last viewed.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_viewed  # type: ignore
-
-    @property
     def requested_at(self) -> Optional[datetime.datetime]:
         """Optional[:class:`datetime.datetime`]: Returns the message request's creation time in UTC, if applicable.
 
@@ -3661,7 +2952,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc.Pr
 
         .. versionadded:: 2.0
         """
-        return not self._message_request if self._message_request is not None else True
+        return self._message_request if self._message_request is not None else True
 
     def is_spam(self) -> bool:
         """:class:`bool`: Indicates if the direct message is a spam message request.
@@ -3907,6 +3198,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
         'name',
         'me',
         '_state',
+        '_accessed',
     )
 
     def __init__(self, *, me: ClientUser, state: ConnectionState, data: GroupChannelPayload):
@@ -3914,6 +3206,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
         self.id: int = int(data['id'])
         self.me: ClientUser = me
         self._update(data)
+        self._accessed: bool = False
 
     def _update(self, data: GroupChannelPayload) -> None:
         self.owner_id: int = int(data['owner_id'])
@@ -3933,6 +3226,9 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
         return self.me.id, self.id
 
     async def _get_channel(self) -> Self:
+        if not self._accessed:
+            await self._state.call_connect(self.id)
+            self._accessed = True
         return self
 
     def _initial_ring(self):
@@ -4015,14 +3311,6 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
         return f'https://discord.com/channels/@me/{self.id}'
 
     @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
-
-    @property
     def last_message(self) -> Optional[Message]:
         """Retrieves the last message from this channel in cache.
 
@@ -4042,69 +3330,6 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
             The last message in this channel or ``None`` if not found.
         """
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
-
-    @property
-    def acked_message_id(self) -> int:
-        """:class:`int`: The last message ID that the user has acknowledged.
-        It may *not* point to an existing or valid message.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_acked_id
-
-    @property
-    def acked_message(self) -> Optional[Message]:
-        """Retrieves the last message that the user has acknowledged in cache.
-
-        The message might not be valid or point to an existing message.
-
-        .. versionadded:: 2.1
-
-        .. admonition:: Reliable Fetching
-            :class: helpful
-
-            For a slightly more reliable method of fetching the
-            last acknowledged message, consider using either :meth:`history`
-            or :meth:`fetch_message` with the :attr:`acked_message_id`
-            attribute.
-
-        Returns
-        ---------
-        Optional[:class:`Message`]
-            The last acknowledged message in this channel or ``None`` if not found.
-        """
-        acked_message_id = self.acked_message_id
-        if acked_message_id is None:
-            return
-
-        # We need to check if the message is in the same channel
-        message = self._state._get_message(acked_message_id)
-        if message and message.channel.id == self.id:
-            return message
-
-    @property
-    def acked_pin_timestamp(self) -> Optional[datetime.datetime]:
-        """Optional[:class:`datetime.datetime`]: When the channel's pins were last acknowledged.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_pin_timestamp
-
-    @property
-    def mention_count(self) -> int:
-        """:class:`int`: Returns how many unread mentions the user has in this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.badge_count
-
-    @property
-    def last_viewed_timestamp(self) -> datetime.date:
-        """:class:`datetime.date`: When the channel was last viewed.
-
-        .. versionadded:: 2.1
-        """
-        return self.read_state.last_viewed  # type: ignore
 
     def permissions_for(self, obj: Snowflake, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
@@ -4173,7 +3398,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, discord.abc
             An argument list of users to add to this group.
             If the user is of type :class:`Object`, then the ``nick`` attribute
             is used as the nickname for the added recipient.
-        nicks: Optional[Mapping[:class:`~discord.abc.Snowflake`, :class:`str`]]
+        nicks: Optional[Dict[:class:`~discord.abc.Snowflake`, :class:`str`]]
             A mapping of user IDs to nicknames to use for the added recipients.
 
             .. versionadded:: 2.0
@@ -4377,6 +3602,8 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
 
     Note that this class is trimmed down and has no rich attributes.
 
+    .. versionadded:: 2.0
+
     .. container:: operations
 
         .. describe:: x == y
@@ -4391,34 +3618,21 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
 
             Returns the partial messageable's hash.
 
-    .. versionadded:: 2.0
-
     Attributes
     -----------
     id: :class:`int`
         The channel ID associated with this partial messageable.
-    type: Optional[:class:`ChannelType`]
-        The channel type associated with this partial messageable, if given.
-    name: Optional[:class:`str`]
-        The channel name associated with this partial messageable, if given.
     guild_id: Optional[:class:`int`]
         The guild ID associated with this partial messageable.
+    type: Optional[:class:`ChannelType`]
+        The channel type associated with this partial messageable, if given.
     """
 
-    def __init__(
-        self,
-        *,
-        state: ConnectionState,
-        id: int,
-        guild_id: Optional[int] = None,
-        type: Optional[ChannelType] = None,
-        name: Optional[str] = None,
-    ):
+    def __init__(self, state: ConnectionState, id: int, guild_id: Optional[int] = None, type: Optional[ChannelType] = None):
         self._state: ConnectionState = state
         self.id: int = id
         self.guild_id: Optional[int] = guild_id
         self.type: Optional[ChannelType] = type
-        self.name: Optional[str] = name
         self.last_message_id: Optional[int] = None
         self.last_pin_timestamp: Optional[datetime.datetime] = None
 
@@ -4427,15 +3641,6 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
 
     async def _get_channel(self) -> PartialMessageable:
         return self
-
-    @classmethod
-    def _from_webhook_channel(cls, guild: Guild, channel: WebhookChannelPayload) -> Self:
-        return cls(
-            state=guild._state,
-            id=int(channel['id']),
-            guild_id=guild.id,
-            name=channel['name'],
-        )
 
     @property
     def guild(self) -> Optional[Guild]:
@@ -4453,14 +3658,6 @@ class PartialMessageable(discord.abc.Messageable, Hashable):
     def created_at(self) -> datetime.datetime:
         """:class:`datetime.datetime`: Returns the channel's creation time in UTC."""
         return utils.snowflake_time(self.id)
-
-    @property
-    def read_state(self) -> ReadState:
-        """:class:`ReadState`: Returns the read state for this channel.
-
-        .. versionadded:: 2.1
-        """
-        return self._state.get_read_state(self.id)
 
     def permissions_for(self, obj: Any = None, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
@@ -4517,8 +3714,6 @@ def _guild_channel_factory(channel_type: int):
         return TextChannel, value
     elif value is ChannelType.stage_voice:
         return StageChannel, value
-    elif value is ChannelType.directory:
-        return DirectoryChannel, value
     elif value is ChannelType.forum:
         return ForumChannel, value
     else:

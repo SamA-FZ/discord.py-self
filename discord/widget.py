@@ -121,7 +121,7 @@ class WidgetMember(BaseUser):
 
         .. describe:: str(x)
 
-            Returns the widget member's handle (e.g. ``name`` or ``name#discriminator``).
+            Returns the widget member's ``name#discriminator``.
 
     Attributes
     -----------
@@ -130,19 +130,13 @@ class WidgetMember(BaseUser):
     name: :class:`str`
         The member's username.
     discriminator: :class:`str`
-        The member's discriminator. This is a legacy concept that is no longer used.
-    global_name: Optional[:class:`str`]
-        The member's global nickname, taking precedence over the username in display.
-
-        .. versionadded:: 2.1
+        The member's discriminator.
     bot: :class:`bool`
         Whether the member is a bot.
     status: :class:`Status`
         The member's status.
     nick: Optional[:class:`str`]
-        The member's guild-specific nickname. Takes precedence over the global name.
-    avatar: Optional[:class:`str`]
-        The member's avatar hash.
+        The member's nickname.
     activity: Optional[Union[:class:`BaseActivity`, :class:`Spotify`]]
         The member's activity.
     deafened: Optional[:class:`bool`]
@@ -195,7 +189,9 @@ class WidgetMember(BaseUser):
         self.connected_channel: Optional[WidgetChannel] = connected_channel
 
     def __repr__(self) -> str:
-        return f"<WidgetMember name={self.name!r} global_name={self.global_name!r} bot={self.bot} nick={self.nick!r}>"
+        return (
+            f"<WidgetMember name={self.name!r} discriminator={self.discriminator!r}" f" bot={self.bot} nick={self.nick!r}>"
+        )
 
     @property
     def display_name(self) -> str:

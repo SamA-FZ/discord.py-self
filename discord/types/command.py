@@ -24,10 +24,9 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional, TypedDict, Union
+from typing import List, Literal, TypedDict, Union
 from typing_extensions import NotRequired, Required
 
-from .application import IntegrationApplication
 from .channel import ChannelType
 from .snowflake import Snowflake
 
@@ -110,8 +109,6 @@ class _NumberApplicationCommandOption(_BaseValueApplicationCommandOption, total=
     autocomplete: bool
 
 
-SubCommand = Union[_SubCommandCommandOption, _SubCommandGroupCommandOption]
-
 _ValueApplicationCommandOption = Union[
     _StringApplicationCommandOption,
     _IntegerApplicationCommandOption,
@@ -140,10 +137,13 @@ class _BaseApplicationCommand(TypedDict):
     version: Snowflake
 
 
-class _ChatInputApplicationCommand(_BaseApplicationCommand):
-    description: str
+class _ChatInputApplicationCommand(_BaseApplicationCommand, total=False):
+    description: Required[str]
     type: Literal[1]
-    options: NotRequired[List[ApplicationCommandOption]]
+    options: Union[
+        List[_ValueApplicationCommandOption],
+        List[Union[_SubCommandCommandOption, _SubCommandGroupCommandOption]],
+    ]
 
 
 class _BaseContextMenuApplicationCommand(_BaseApplicationCommand):
@@ -177,23 +177,13 @@ class _GuildMessageApplicationCommand(_MessageApplicationCommand):
     guild_id: Snowflake
 
 
-ChatInputCommand = Union[
-    _ChatInputApplicationCommand,
-    _GuildChatInputApplicationCommand,
-]
-UserCommand = Union[
-    _UserApplicationCommand,
-    _GuildUserApplicationCommand,
-]
-MessageCommand = Union[
-    _MessageApplicationCommand,
-    _GuildMessageApplicationCommand,
-]
 GuildApplicationCommand = Union[
     _GuildChatInputApplicationCommand,
     _GuildUserApplicationCommand,
     _GuildMessageApplicationCommand,
 ]
+
+
 ApplicationCommand = Union[
     GlobalApplicationCommand,
     GuildApplicationCommand,
@@ -214,22 +204,3 @@ class GuildApplicationCommandPermissions(TypedDict):
     application_id: Snowflake
     guild_id: Snowflake
     permissions: List[ApplicationCommandPermissions]
-
-
-class ApplicationCommandCursor(TypedDict):
-    next: Optional[str]
-    previous: Optional[str]
-    repaired: Optional[str]
-
-
-class ApplicationCommandIndex(TypedDict):
-    application_commands: List[ApplicationCommand]
-    applications: Optional[List[IntegrationApplication]]
-
-
-class GuildApplicationCommandIndex(ApplicationCommandIndex):
-    version: Snowflake
-
-
-class ApplicationCommandSearch(ApplicationCommandIndex):
-    cursor: ApplicationCommandCursor

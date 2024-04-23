@@ -24,20 +24,12 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Iterator, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterator, Optional, Tuple, Union
 
 from .utils import parse_time
 
-if TYPE_CHECKING:
-    MetadataObject = Mapping[str, Any]
-else:
-    MetadataObject = Mapping
 
-__all__ = ('Metadata',)
-
-
-class Metadata(MetadataObject):
+class Metadata:
     """Represents a raw model from Discord.
 
     Because of how unstable and wildly varying some metadata in Discord can be, this is a simple class
@@ -73,32 +65,24 @@ class Metadata(MetadataObject):
             to be used as an iterable in list/dict/etc constructions.
     """
 
-    def __init__(self, *args, **kwargs) -> None:
-        data = dict(*args, **kwargs)
-        for key, value in data.items():
-            key, value = self.__parse(key, value)
-            self.__dict__[key] = value
+    def __init__(self, data: Optional[MetadataObject] = None) -> None:
+        if not data:
+            return
 
-    @staticmethod
-    def __parse(key: str, value: Any) -> Tuple[str, Any]:
-        if isinstance(value, dict):
-            value = Metadata(value)
-        elif isinstance(value, list):
-            if key.endswith('_ids'):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                value = Metadata(value)
+            elif key.endswith('_id') and isinstance(value, str) and value.isdigit():
+                value = int(value)
+            elif (key.endswith('_at') or key.endswith('_date')) and isinstance(value, str):
                 try:
-                    value = [int(x) for x in value]
+                    value = parse_time(value)
                 except ValueError:
                     pass
-            value = [Metadata(x) if isinstance(x, dict) else x for x in value]
-        elif key.endswith('_id') and isinstance(value, str) and value.isdigit():
-            value = int(value)
-        elif (key.endswith('_at') or key.endswith('_date')) and isinstance(value, str):
-            try:
-                value = parse_time(value)
-            except ValueError:
-                pass
+            elif isinstance(value, list):
+                value = [Metadata(x) if isinstance(x, dict) else x for x in value]
 
-        return key, value
+            self.__dict__[key] = value
 
     def __repr__(self) -> str:
         if not self.__dict__:
@@ -122,15 +106,10 @@ class Metadata(MetadataObject):
         return self.__dict__[key]
 
     def __setitem__(self, key: str, value: Any) -> None:
-        key, value = self.__parse(key, value)
         self.__dict__[key] = value
 
     def __getattr__(self, _) -> Any:
         return None
-
-    def __setattr__(self, key: str, value: Any) -> None:
-        key, value = self.__parse(key, value)
-        self.__dict__[key] = value
 
     def __contains__(self, key: str) -> bool:
         return key in self.__dict__
@@ -149,3 +128,7 @@ class Metadata(MetadataObject):
     def items(self):
         """A set-like object providing a view on the metadata's items."""
         return self.__dict__.items()
+
+
+if TYPE_CHECKING:
+    MetadataObject = Union[Metadata, Dict[str, Any]]
